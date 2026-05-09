@@ -19,8 +19,8 @@
 
 ## 配置管理
 - `normalizeConfig(input)`：归一化配置结构、范围与默认值。
-- `getConfigPath()`：配置文件路径为 `process.cwd()/config.yml`。
-- `getLegacyConfigPath()`：兼容旧路径 `app.getPath('userData')/config.yml`。
+- `getConfigPath()`：配置文件固定在 `AppData/Local/BlueRandom/config.yml`。
+- `getLegacyConfigPaths()`：兼容旧路径（可执行文件目录、开发环境 `process.cwd()`、以及旧的 `Blue Random` 目录）。
 - `toConfigYamlWithComments(config)`：生成带中文注释的 YAML。
 - `saveConfig(config)`：写入 YAML。
 - `writeDefaultConfigIfMissing(configPath)`：不存在时写默认配置或复制旧配置。
@@ -54,6 +54,8 @@
   - `POST /api/config`：保存配置，必要时重启配置服务并刷新悬浮窗。
   - `GET /api/logs`：SSE 日志流。
   - `GET /api/app-info`：返回 `version` 与 `isDebugMode`。
+  - `POST /api/config/open-file`：打开配置文件。
+  - `POST /api/config/open-dir`：打开配置目录。
   - `GET /api/check-update`：更新检查。
   - `POST /api/restart`：重启应用。
   - `POST /api/admin/elevate`：申请管理员权限并重启。
@@ -113,6 +115,6 @@
   - 所有 `console.*` 会进入日志流，可在 Web 配置页右侧查看。
   - 若日志过多，可临时提高 `LOG_BUFFER_LIMIT` 以排查问题。
 - 配置定位：
-  - 当前配置文件在 `process.cwd()/config.yml`。
+  - 当前配置文件固定在 `AppData/Local/BlueRandom/config.yml`。
 - 端口冲突：
   - 配置页端口修改后需重启服务，错误会输出 `Failed to start config web server`。

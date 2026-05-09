@@ -2207,6 +2207,15 @@ var DEFAULT_CONFIG = {
 };
 var IS_WINDOWS = process.platform === "win32";
 var ADMIN_TASK_DEFAULT_NAME = "Blue Random (Admin)";
+var USERDATA_DIR_NAME = "BlueRandom";
+function configureUserDataPath() {
+	if (!IS_WINDOWS) return;
+	const appData = app.getPath("appData");
+	const localRoot = path.resolve(appData, "..", "Local");
+	const targetPath = path.join(localRoot, USERDATA_DIR_NAME);
+	app.setPath("userData", targetPath);
+}
+configureUserDataPath();
 var currentConfig = DEFAULT_CONFIG;
 var dragSessions = /* @__PURE__ */ new Map();
 var appTray = null;
@@ -2316,6 +2325,9 @@ function requestAdminRelaunch() {
 		};
 	}
 }
+function getDefaultExePath() {
+	return app.getPath("exe");
+}
 function createAdminStartupTask({ taskName, exePath, runAsUser }) {
 	if (!IS_WINDOWS) return {
 		ok: false,
@@ -2410,10 +2422,49 @@ function normalizeConfig(input) {
 	};
 }
 function getConfigPath() {
-	return path.join(process.cwd(), "config.yml");
-}
-function getLegacyConfigPath() {
 	return path.join(app.getPath("userData"), "config.yml");
+}
+function getLegacyConfigPaths() {
+	const legacyPaths = [];
+	const exeDir = path.dirname(app.getPath("exe"));
+	legacyPaths.push(path.join(exeDir, "config.yml"));
+	if (!app.isPackaged) legacyPaths.push(path.join(process.cwd(), "config.yml"));
+	if (IS_WINDOWS) {
+		const appData = app.getPath("appData");
+		const localRoot = path.resolve(appData, "..", "Local");
+		legacyPaths.push(path.join(localRoot, "Blue Random", "config.yml"));
+	}
+	const currentPath = getConfigPath();
+	return Array.from(new Set(legacyPaths.filter((p) => p && p !== currentPath)));
+}
+function getConfigDir() {
+	return path.dirname(getConfigPath());
+}
+async function openConfigFile() {
+	const configPath = getConfigPath();
+	writeDefaultConfigIfMissing(configPath);
+	const result = await shell.openPath(configPath);
+	if (result) return {
+		ok: false,
+		message: `打开配置文件失败: ${result}`
+	};
+	return {
+		ok: true,
+		message: "已打开配置文件。"
+	};
+}
+async function openConfigDir() {
+	const configDir = getConfigDir();
+	fs.mkdirSync(configDir, { recursive: true });
+	const result = await shell.openPath(configDir);
+	if (result) return {
+		ok: false,
+		message: `打开配置目录失败: ${result}`
+	};
+	return {
+		ok: true,
+		message: "已打开配置目录。"
+	};
 }
 function toConfigYamlWithComments(config) {
 	const fb = config.floatingButton;
@@ -2422,6 +2473,7 @@ function toConfigYamlWithComments(config) {
 	const web = config.webConfig;
 	const posX = Number.isFinite(Number(fb.position.x)) ? String(Math.round(Number(fb.position.x))) : "null";
 	const posY = Number.isFinite(Number(fb.position.y)) ? String(Math.round(Number(fb.position.y))) : "null";
+	const yamlSingleQuote = (value) => `'${String(value || "").replace(/'/g, "''")}'`;
 	return [
 		"# 抽取名单列表",
 		`studentList:${Array.isArray(config.studentList) && config.studentList.length > 0 ? "\n" + config.studentList.map((s) => `  - name: "${s.name}"\n    weight: ${s.weight}`).join("\n") : " []"}`,
@@ -2465,9 +2517,9 @@ function toConfigYamlWithComments(config) {
 		"  # 是否创建开机计划任务（管理员权限运行）",
 		`  adminAutoStartEnabled: ${web.adminAutoStartEnabled ? "true" : "false"}`,
 		"  # 计划任务运行的可执行文件路径",
-		`  adminAutoStartPath: "${String(web.adminAutoStartPath || "")}"`,
+		`  adminAutoStartPath: ${yamlSingleQuote(web.adminAutoStartPath)}`,
 		"  # 计划任务名称",
-		`  adminAutoStartTaskName: "${String(web.adminAutoStartTaskName || ADMIN_TASK_DEFAULT_NAME)}"`,
+		`  adminAutoStartTaskName: ${yamlSingleQuote(web.adminAutoStartTaskName || ADMIN_TASK_DEFAULT_NAME)}`,
 		""
 	].join("\n");
 }
@@ -2479,8 +2531,7 @@ function saveConfig(config) {
 }
 function writeDefaultConfigIfMissing(configPath) {
 	if (fs.existsSync(configPath)) return;
-	const legacyPath = getLegacyConfigPath();
-	if (legacyPath !== configPath && fs.existsSync(legacyPath)) {
+	for (const legacyPath of getLegacyConfigPaths()) if (fs.existsSync(legacyPath)) {
 		fs.mkdirSync(path.dirname(configPath), { recursive: true });
 		fs.copyFileSync(legacyPath, configPath);
 		return;
@@ -2749,8 +2800,31 @@ function createConfigServerRequestHandler() {
 		if (req.method === "GET" && requestUrl === "/api/app-info") return sendJson(res, 200, {
 			version: app.getVersion(),
 			isDebugMode,
-			isAdmin: isProcessElevated()
+			isAdmin: isProcessElevated(),
+			exePath: getDefaultExePath(),
+			configPath: getConfigPath(),
+			configDir: getConfigDir()
 		});
+		if (req.method === "POST" && requestUrl === "/api/config/open-file") try {
+			const result = await openConfigFile();
+			if (!result.ok) return sendJson(res, 400, result);
+			return sendJson(res, 200, result);
+		} catch (error) {
+			return sendJson(res, 500, {
+				ok: false,
+				message: String(error)
+			});
+		}
+		if (req.method === "POST" && requestUrl === "/api/config/open-dir") try {
+			const result = await openConfigDir();
+			if (!result.ok) return sendJson(res, 400, result);
+			return sendJson(res, 200, result);
+		} catch (error) {
+			return sendJson(res, 500, {
+				ok: false,
+				message: String(error)
+			});
+		}
 		if (req.method === "GET" && requestUrl === "/api/check-update") try {
 			return sendJson(res, 200, await checkUpdateFromMain());
 		} catch (error) {
@@ -2814,16 +2888,13 @@ function createConfigServerRequestHandler() {
 				ok: true,
 				message: "已在管理员权限下运行。"
 			});
-			sendJson(res, 200, {
-				ok: true,
-				message: "即将请求管理员权限并重启。"
-			});
+			const result = requestAdminRelaunch();
+			if (!result.ok) return sendJson(res, 400, result);
+			sendJson(res, 200, result);
 			setTimeout(() => {
-				if (requestAdminRelaunch().ok) {
-					isQuitting = true;
-					app.exit(0);
-				}
-			}, 120);
+				isQuitting = true;
+				app.exit(0);
+			}, 150);
 			return;
 		}
 		if (req.method === "POST" && requestUrl === "/api/task/create-admin-startup") try {

@@ -71,6 +71,9 @@
 
 ## 样式关键点
 - 布局：`.layout` 为 `grid`，`2fr : 1fr` 固定右侧 1/3。
+- 内部滚动（左侧配置区域）：为了防止深层嵌套导致元素越界或引发整个页面的滚动，在 Tab 容器应用了严格的滚动与高度限制：
+  - `.tab-container` 必须设置 `overflow-y: scroll`，以处理超出部分并在容器内部分解滚动。
+  - `.tab-content` 必须设置 `height: 100%`，约束自身的高度必须遵循祖先节点分配的高度边界。
 - 右侧日志：`.panel-right` 设置 `max-height`，`.log-list` 滚动。
 - 长日志：`.log-text` 使用 `word-break` + `overflow-wrap`。
 - 徽章：`.debug-badge`（蓝色）、`.version-badge`（浅色）。

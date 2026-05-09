@@ -18,7 +18,7 @@
 - ⚙️ Web 配置页
 
 ## 快速开箱 📦
-- 前往 [Github Actions](https://github.com/Yun-Hydrogen/ba_random_electron/actions) 下载 preview 版 zip，或在 [Github Releases](https://github.com/Yun-Hydrogen/ba_random_electron/releases) 获取手动发布的正式版。
+- 前往 [Github Actions](https://github.com/Yun-Hydrogen/ba_random_electron/actions) 下载 最新构建，或在 [Github Releases](https://github.com/Yun-Hydrogen/ba_random_electron/releases) 获取手正式版。
 - 解压后运行可执行文件，在托盘区域找到 Blue Random 的托盘图标并右键，点击 `配置` 将跳转到 Web 配置界面。
 - 导入学生名单，并调整偏好设置。
 - 开始尽情享受~~抽卡~~吧!

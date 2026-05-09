@@ -140,11 +140,23 @@
             </div>
 
             <div class="tab-content" v-else-if="activeTab === 'web'" key="web">
-              <p class="desc">老师注意！这些配置涉及程序基本运行。正常情况下，老师是不需要调整这里的配置的哦~</p>
+              <p class="desc">老师注意！这些配置涉及程序基本运行,正常情况下，老师是不需要调整这里的配置的哦~</p>
               <label>
                 Web配置界面的端口（1-65535）
                 <input type="number" v-model.number="config.webConfig.port" min="1" max="65535" required />
               </label>
+
+              <div class="admin-block config-block">
+                <p class="admin-title">配置文件位置</p>
+                <label>
+                  配置文件路径(不可修改)
+                  <input type="text" :value="configPath" readonly />
+                </label>
+                <div class="row">
+                  <button type="button" class="admin-btn" @click="openConfigFile">打开配置文件</button>
+                  <button type="button" class="admin-btn" @click="openConfigDir">打开配置目录</button>
+                </div>
+              </div>
 
               <div class="admin-block always-top-block">
                 <p class="admin-title">管理员置顶增强（Windows）</p>
@@ -235,6 +247,9 @@ const logs = ref([])
 const isDebugMode = ref(false)
 const isAdmin = ref(false)
 const appVersion = ref('0.0.0')
+const defaultExePath = ref('')
+const configPath = ref('')
+const configDir = ref('')
 const updateState = ref({
   loading: false,
   status: 'idle',
@@ -424,6 +439,7 @@ const fetchConfig = async () => {
     const response = await axios.get(`${apiBase}/config`)
     config.value = response.data
     rawListText.value = (config.value.studentList || []).map(s => s.name).join('\n')
+    applyDefaultAutoStartPath()
     addLog('info', '配置已加载')
   } catch (error) {
     console.error('加载配置失败:', error)
@@ -438,10 +454,24 @@ const fetchAppInfo = async () => {
     isDebugMode.value = Boolean(response.data && response.data.isDebugMode)
     isAdmin.value = Boolean(response.data && response.data.isAdmin)
     appVersion.value = response.data && response.data.version ? response.data.version : '0.0.0'
+    defaultExePath.value = response.data && response.data.exePath ? response.data.exePath : ''
+    configPath.value = response.data && response.data.configPath ? response.data.configPath : ''
+    configDir.value = response.data && response.data.configDir ? response.data.configDir : ''
+    applyDefaultAutoStartPath()
   } catch (_error) {
     isDebugMode.value = false
     isAdmin.value = false
     appVersion.value = '0.0.0'
+    defaultExePath.value = ''
+    configPath.value = ''
+    configDir.value = ''
+  }
+}
+
+const applyDefaultAutoStartPath = () => {
+  if (!config.value || !config.value.webConfig) return
+  if (!config.value.webConfig.adminAutoStartPath && defaultExePath.value) {
+    config.value.webConfig.adminAutoStartPath = defaultExePath.value
   }
 }
 
@@ -495,15 +525,17 @@ const requestAdminElevation = async () => {
     window.alert(response.data?.message || '已发送管理员权限请求。')
   } catch (error) {
     console.error('申请管理员权限失败:', error)
-    addLog('error', '申请管理员权限失败')
-    window.alert('申请管理员权限失败，请查看日志。')
+    const message = error?.response?.data?.message || '申请管理员权限失败'
+    addLog('error', message)
+    window.alert(`${message}，请查看日志。`)
   }
 }
 
 const createAdminStartupTask = async () => {
   try {
+    const fallbackPath = defaultExePath.value || ''
     const payload = {
-      exePath: String(config.value.webConfig.adminAutoStartPath || '').trim(),
+      exePath: String(config.value.webConfig.adminAutoStartPath || fallbackPath).trim(),
       taskName: String(config.value.webConfig.adminAutoStartTaskName || 'Blue Random (Admin)').trim()
     }
     if (!payload.exePath) {
@@ -517,6 +549,32 @@ const createAdminStartupTask = async () => {
     console.error('创建计划任务失败:', error)
     addLog('error', '创建计划任务失败')
     window.alert('创建计划任务失败，请查看日志。')
+  }
+}
+
+const openConfigFile = async () => {
+  try {
+    const response = await axios.post(`${apiBase}/config/open-file`)
+    addLog('success', response.data?.message || '已打开配置文件')
+    window.alert(response.data?.message || '已打开配置文件。')
+  } catch (error) {
+    console.error('打开配置文件失败:', error)
+    const message = error?.response?.data?.message || '打开配置文件失败'
+    addLog('error', message)
+    window.alert(`${message}，请查看日志。`)
+  }
+}
+
+const openConfigDir = async () => {
+  try {
+    const response = await axios.post(`${apiBase}/config/open-dir`)
+    addLog('success', response.data?.message || '已打开配置目录')
+    window.alert(response.data?.message || '已打开配置目录。')
+  } catch (error) {
+    console.error('打开配置目录失败:', error)
+    const message = error?.response?.data?.message || '打开配置目录失败'
+    addLog('error', message)
+    window.alert(`${message}，请查看日志。`)
   }
 }
 
@@ -900,6 +958,11 @@ input[type="checkbox"] {
   border-radius: 12px;
   border: 1px solid rgba(120, 150, 190, 0.35);
   background: rgba(238, 244, 252, 0.7);
+}
+
+.admin-block.config-block {
+  background: rgba(247, 255, 244, 0.8);
+  border-color: rgba(200, 220, 255, 0.5);
 }
 
 .admin-block.always-top-block {

@@ -1,23 +1,5 @@
 # 抽取名单列表
-studentList:
-  - name: "白子"
-    weight: 1
-  - name: "星野"
-    weight: 1
-  - name: "芹香"
-    weight: 1
-  - name: "优香"
-    weight: 1
-  - name: "日富美"
-    weight: 1
-  - name: "日奈"
-    weight: 1
-  - name: "睦月"
-    weight: 1
-  - name: "佳代子"
-    weight: 1
-  - name: "梓"
-    weight: 1
+studentList: []
 allowRepeatDraw: true
 
 # 悬浮按钮配置
@@ -30,13 +12,13 @@ floatingButton:
   alwaysOnTop: true
   # 悬浮按钮窗口位置（左上角屏幕坐标），退出时自动保存；null 表示使用系统默认位置
   position:
-    x: 1120
-    y: 674
+    x: 0
+    y: 0
 
 # 人数选择窗口配置
 pickCountDialog:
   # 是否默认播放喜庆点名音乐（true/false），默认 false
-  defaultPlayMusic: true
+  defaultPlayMusic: false
   # 背景变暗程度，范围 0-100（100 接近全黑），默认 50
   backgroundDarknessPercent: 50
   # 人数默认值，范围 1-10 的整数，默认 1
@@ -47,14 +29,14 @@ pickResultDialog:
   # 是否默认播放抽奖音效（true/false），默认 true
   defaultPlayGachaSound: true
   # 抽奖音效音量（0.0-1.0），默认 0.6
-  gachaSoundVolume: 1
+  gachaSoundVolume: 0.6
 
 # 网页配置服务
 webConfig:
   # 配置网页端口（默认 21219）
   port: 21219
   # 启用管理员置顶增强（Windows 下会尝试管理员权限）
-  adminTopmostEnabled: true
+  adminTopmostEnabled: false
   # 是否创建开机计划任务（管理员权限运行）
   adminAutoStartEnabled: false
   # 计划任务运行的可执行文件路径
