@@ -529,18 +529,13 @@ const requestAdminElevation = async () => {
     const message = error?.response?.data?.message || '申请管理员权限失败'
     addLog('error', message)
     window.alert(`${message}，请查看日志。`)
-    const message = error?.response?.data?.message || '申请管理员权限失败'
-    addLog('error', message)
-    window.alert(`${message}，请查看日志。`)
   }
 }
 
 const createAdminStartupTask = async () => {
   try {
     const fallbackPath = defaultExePath.value || ''
-    const fallbackPath = defaultExePath.value || ''
     const payload = {
-      exePath: String(config.value.webConfig.adminAutoStartPath || fallbackPath).trim(),
       exePath: String(config.value.webConfig.adminAutoStartPath || fallbackPath).trim(),
       taskName: String(config.value.webConfig.adminAutoStartTaskName || 'Blue Random (Admin)').trim()
     }
