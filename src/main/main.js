@@ -902,6 +902,16 @@ function createConfigServerRequestHandler() {
         isQuitting = true;
         app.exit(0);
       }, 150);
+      const result = requestAdminRelaunch();
+      if (!result.ok) {
+        return sendJson(res, 400, result);
+      }
+
+      sendJson(res, 200, result);
+      setTimeout(() => {
+        isQuitting = true;
+        app.exit(0);
+      }, 150);
       return;
     }
 

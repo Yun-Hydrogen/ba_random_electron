@@ -440,6 +440,7 @@ const fetchConfig = async () => {
     config.value = response.data
     rawListText.value = (config.value.studentList || []).map(s => s.name).join('\n')
     applyDefaultAutoStartPath()
+    applyDefaultAutoStartPath()
     addLog('info', '配置已加载')
   } catch (error) {
     console.error('加载配置失败:', error)
@@ -528,13 +529,18 @@ const requestAdminElevation = async () => {
     const message = error?.response?.data?.message || '申请管理员权限失败'
     addLog('error', message)
     window.alert(`${message}，请查看日志。`)
+    const message = error?.response?.data?.message || '申请管理员权限失败'
+    addLog('error', message)
+    window.alert(`${message}，请查看日志。`)
   }
 }
 
 const createAdminStartupTask = async () => {
   try {
     const fallbackPath = defaultExePath.value || ''
+    const fallbackPath = defaultExePath.value || ''
     const payload = {
+      exePath: String(config.value.webConfig.adminAutoStartPath || fallbackPath).trim(),
       exePath: String(config.value.webConfig.adminAutoStartPath || fallbackPath).trim(),
       taskName: String(config.value.webConfig.adminAutoStartTaskName || 'Blue Random (Admin)').trim()
     }

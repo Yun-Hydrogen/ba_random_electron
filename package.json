@@ -1,6 +1,10 @@
 {
   "name": "blue-random-electron",
+<<<<<<< HEAD
   "version": "26.05.4",
+=======
+  "version": "26.05.3",
+>>>>>>> 9fe589d8ef9fef6504d3577334b031147794cf03
   "description": "蔚蓝点名-仿《蔚蓝档案》学员招募的随机点名工具",
   "author": "HydrogenRua",
   "main": "dist-electron/main.js",
