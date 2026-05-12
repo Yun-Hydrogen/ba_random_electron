@@ -1,6 +1,6 @@
 const { app, BrowserWindow, Tray, nativeImage, shell, dialog, ipcMain, net } = require('electron');
 const http = require('http');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
@@ -137,10 +137,17 @@ function quoteForPowerShell(text) {
   return String(text).replace(/'/g, "''");
 }
 
+function getPowerShellPath() {
+  if (!IS_WINDOWS) return 'powershell';
+  const root = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const psPath = path.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  return fs.existsSync(psPath) ? psPath : 'powershell';
+}
+
 function isProcessElevated() {
   if (!IS_WINDOWS) return false;
   try {
-    const output = execFileSync('powershell', [
+    const output = execFileSync(getPowerShellPath(), [
       '-NoProfile',
       '-Command',
       '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)'
@@ -157,15 +164,30 @@ function requestAdminRelaunch() {
   }
 
   const exePath = process.execPath;
-  const args = process.argv.slice(1).map(arg => `"${arg.replace(/"/g, '\\"')}"`).join(' ');
-  const command = `Start-Process -FilePath '${quoteForPowerShell(exePath)}' -ArgumentList '${quoteForPowerShell(args)}' -Verb RunAs`;
+  const args = process.argv.slice(1);
+  const argList = args.length > 0
+    ? args.map(arg => `'${quoteForPowerShell(arg)}'`).join(', ')
+    : '';
+  const script = [
+    `$exe = '${quoteForPowerShell(exePath)}'`,
+    args.length > 0
+      ? `$args = @(${argList}); Start-Process -FilePath $exe -ArgumentList $args -Verb RunAs`
+      : 'Start-Process -FilePath $exe -Verb RunAs'
+  ].join('; ');
+  const result = spawnSync(getPowerShellPath(), ['-NoProfile', '-Command', script], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
 
-  try {
-    execFileSync('powershell', ['-NoProfile', '-Command', command], { stdio: 'ignore' });
-    return { ok: true, message: '已请求管理员权限，即将重新启动。' };
-  } catch (error) {
-    return { ok: false, message: '管理员权限请求失败或被取消。', detail: String(error) };
+  if (result.error || result.status !== 0) {
+    const detail = [result.error ? String(result.error) : '', result.stderr || '', result.stdout || '']
+      .join('\n')
+      .trim();
+    console.error('Admin relaunch failed:', detail || 'command failed');
+    return { ok: false, message: '管理员权限请求失败或被取消。', detail: detail || 'command failed' };
   }
+
+  return { ok: true, message: '已请求管理员权限，即将重新启动。' };
 }
 
 function getDefaultExePath() {
