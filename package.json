@@ -1,12 +1,19 @@
 {
   "name": "blue-random-electron",
-  "version": "26.05.8",
+  "version": "26.05.10",
   "description": "蔚蓝点名-仿《蔚蓝档案》学员招募的随机点名工具",
   "author": "HydrogenRua",
   "main": "dist-electron/main.js",
   "build": {
     "appId": "com.hydrogenrua.blue-random",
     "productName": "Blue Random",
+    "extraFiles": [
+      {
+        "from": "third_party/uiaccess.dll",
+        "to": "uiaccess.dll"
+      },
+      "THIRD_PARTY_NOTICES/RunUIAccess-MIT.txt"
+    ],
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -19,7 +26,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && electron-builder",
+    "build": "node build/prepare-uiaccess.js && vite build && electron-builder",
     "start": "electron ."
   },
   "dependencies": {

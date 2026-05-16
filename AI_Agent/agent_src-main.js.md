@@ -101,6 +101,7 @@
 
 ## 异常处理清单
 - `process.on('uncaughtException')` 和 `process.on('unhandledRejection')` 已接管，新增异步逻辑时务必保证错误能被捕获并输出日志。
+- UIAccess 与透明窗口渲染冲突：当配置了 `--uiaccess` 唤起特权悬浮窗时，必须通过 `app.commandLine.appendSwitch('disable-direct-composition')` 禁用 DirectComposition 硬件合成，否则 DWM 会在透明边缘裁剪出现幽灵透明失灵（有逻辑无图像）。
 - Web 服务接口中返回 JSON 时，注意统一使用 `sendJson`，避免 `res.writeHead` 混用造成响应异常。
 - 更新检查失败时要返回 `status: 'error'`，并附带 `detail` 与 `debug`，便于前端诊断。
 - 读写 `config.yml` 失败必须回退默认配置，避免启动阻塞。

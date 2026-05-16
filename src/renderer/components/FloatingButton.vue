@@ -2,7 +2,7 @@
   <div class="floating-root">
     <button
       class="floating-button"
-      :class="{ 'is-dragging': isDragging }"
+      :class="{ 'is-dragging': isDragging, 'is-hovering': isHovering }"
       :style="buttonStyle"
       @contextmenu.prevent
       @pointerdown="handlePointerDown"
@@ -11,7 +11,7 @@
       @pointercancel="handlePointerCancel"
       @pointerenter="handlePointerEnter"
       @pointerleave="handlePointerLeave"
-      title="抽取"
+      title=""
     >
       <img src="/image/random.svg" alt="随机抽取" draggable="false" />
       <span class="floating-button-label" :style="textStyle">抽取</span>
@@ -203,6 +203,10 @@ function handlePointerUp(event) {
     }
   } else {
     playClickSound()
+    isHovering.value = false // 抽卡时强制取消Hover状态，避免隐藏恢复后依然残留高亮
+    if (event.currentTarget && event.currentTarget.blur) {
+      event.currentTarget.blur() // 移除触控/点击后系统的持续焦点残留
+    }
     emit('click')
   }
 
@@ -241,6 +245,8 @@ function handlePointerCancel(event) {
 .floating-button {
   position: relative;
   border: 0;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
   border-radius: 16px;
   cursor: pointer;
   touch-action: none;
@@ -248,13 +254,12 @@ function handlePointerCancel(event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(145deg, #66CCFFF0, rgba(64, 145, 240, 0.95));
-  transition: transform 300ms ease, box-shadow 300ms ease;
+  background:  #66CCFFF0;
+  transition: transform 300ms ease, box-shadow 300ms ease, background 300ms ease;
 }
 
-.floating-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 1px 10px 5px rgba(0, 0, 0, 0.1);
+.floating-button.is-hovering:not(.is-dragging) {
+  background: #81ffea;
 }
 
 .floating-button:active {

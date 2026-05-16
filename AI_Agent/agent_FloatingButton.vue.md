@@ -33,6 +33,7 @@
 - 拖拽与指针：
   - `getGlobalPoint(event)`：统一获取屏幕坐标，兼容触控。
   - `scheduleMove()` / `flushMove()` / `cancelScheduledMove()`：合并拖拽更新频率。
+  - **状态重置**：触发点击(`emit('click')`)时强制重置 `isHovering.value = false`，避免窗口隐藏恢复由于判定中断导致的 Hover 残留。
   - `updateIgnoreMouse()`：根据 hover / press 状态切换窗口鼠标穿透。
   - `handlePointerEnter/Leave()`：更新 hover 并切换穿透。
   - `handlePointerDown()`：初始化拖拽状态并捕获指针。

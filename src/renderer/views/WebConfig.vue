@@ -1,5 +1,27 @@
 <template>
   <main class="page">
+    <teleport to="body">
+      <div class="toast-stack" role="status" aria-live="polite">
+        <transition name="uiaccess-fly">
+          <div v-if="uiAccessPromptOpen" class="uiaccess-toast">
+            <div class="uiaccess-title">确认启用 UIAccess</div>
+            <div class="uiaccess-desc">
+              启用后将使用 RunUIAccess 的 uiaccess.dll 以 UIAccess 权限重启，可能触发安全软件提示。
+            </div>
+            <div class="uiaccess-actions">
+              <button type="button" class="uiaccess-btn secondary" @click="cancelUiAccessEnable">取消</button>
+              <button type="button" class="uiaccess-btn" @click="confirmUiAccessEnable">确认启用</button>
+            </div>
+          </div>
+        </transition>
+        <transition-group name="toast-stack" tag="div" class="toast-stack-list">
+          <div v-for="toast in toasts" :key="toast.id" class="toast" :class="`toast-${toast.type}`">
+            <div class="toast-text">{{ toast.message }}</div>
+            <div class="toast-bar" :style="{ animationDuration: `${toast.duration}ms` }"></div>
+          </div>
+        </transition-group>
+      </div>
+    </teleport>
     <div class="layout">
       <section class="panel panel-left">
         <div class="header">
@@ -168,6 +190,25 @@
                 <button type="button" class="admin-btn" @click="requestAdminElevation">管理员身份重启</button>
               </div>
 
+              <div class="admin-block uiaccess-block">
+                <p class="admin-title">UIAccess 置顶增强（Windows）</p>
+                <div class="uiaccess-panel" :class="{ disabled: !isAdmin }">
+                  <label class="inline">
+                    <input
+                      type="checkbox"
+                      v-model="config.webConfig.uiAccessEnabled"
+                      @change="onUiAccessToggle"
+                      :disabled="!isAdmin"
+                    />
+                    管理员身份运行时自动使用 UIAccess 获得在几乎所有窗口上的置顶权限。
+                  </label>
+                  <p class="admin-hint">启用后仅在管理员身，yi份下自动尝试 UIAccess 重启。</p>
+                  <p v-if="!uiAccessDllExists" class="admin-hint">未检测到 uiaccess.dll，请确认安装包完整。</p>
+                  <div v-if="!isAdmin" class="uiaccess-mask">需要管理员权限才能修改该设置</div>
+                </div>
+                <button type="button" class="admin-btn" @click="requestAppRestart">立即重启</button>
+              </div>
+
               <div class="admin-block auto-start-block">
                 <p class="admin-title">开机计划任务（管理员运行）</p>
                 <label>
@@ -210,6 +251,7 @@
             <h2>运行日志</h2>
             <span v-if="isDebugMode" class="debug-badge">Dev</span>
             <span v-if="isAdmin" class="admin-badge">管理员</span>
+            <span v-if="isUiAccess" class="uiaccess-badge">UIAccess</span>
             <span class="version-badge">版本 {{ appVersion }}</span>
           </div>
         </div>
@@ -246,10 +288,18 @@ const releasePageUrl = 'https://github.com/Yun-Hydrogen/ba_random_electron/relea
 const logs = ref([])
 const isDebugMode = ref(false)
 const isAdmin = ref(false)
+const isUiAccess = ref(false)
 const appVersion = ref('0.0.0')
 const defaultExePath = ref('')
+const uiAccessDllExists = ref(false)
 const configPath = ref('')
 const configDir = ref('')
+const uiAccessPromptOpen = ref(false)
+const uiAccessEnablePending = ref(false)
+const toasts = ref([])
+let toastSeed = 0
+const toastTimers = new Map()
+let uiAccessAutoFilled = false
 const updateState = ref({
   loading: false,
   status: 'idle',
@@ -275,7 +325,7 @@ const checkUpdate = async () => {
     const response = await axios.get(`${apiBase}/check-update`)
     const result = response.data
     if (result && Array.isArray(result.debug)) {
-      result.debug.forEach((line) => addLog('info', `更新调试: ${line}`))
+      result.debug.forEach((line) => addLog('info', `更新: ${line}`))
     }
 
     updateState.value = {
@@ -374,7 +424,8 @@ const config = ref({
     adminTopmostEnabled: false,
     adminAutoStartEnabled: false,
     adminAutoStartPath: '',
-    adminAutoStartTaskName: 'Blue Random (Admin)'
+    adminAutoStartTaskName: 'Blue Random (Admin)',
+    uiAccessEnabled: false
   }
 })
 
@@ -440,12 +491,11 @@ const fetchConfig = async () => {
     config.value = response.data
     rawListText.value = (config.value.studentList || []).map(s => s.name).join('\n')
     applyDefaultAutoStartPath()
-    applyDefaultAutoStartPath()
     addLog('info', '配置已加载')
   } catch (error) {
     console.error('加载配置失败:', error)
     addLog('error', '加载配置失败，请检查服务是否启动')
-    window.alert('配置页面初始化失败。')
+    showToast('配置页面初始化失败。', 'error')
   }
 }
 
@@ -454,16 +504,20 @@ const fetchAppInfo = async () => {
     const response = await axios.get(`${apiBase}/app-info`)
     isDebugMode.value = Boolean(response.data && response.data.isDebugMode)
     isAdmin.value = Boolean(response.data && response.data.isAdmin)
+    isUiAccess.value = Boolean(response.data && response.data.isUiAccess)
     appVersion.value = response.data && response.data.version ? response.data.version : '0.0.0'
     defaultExePath.value = response.data && response.data.exePath ? response.data.exePath : ''
+    uiAccessDllExists.value = Boolean(response.data && response.data.uiAccessDllExists)
     configPath.value = response.data && response.data.configPath ? response.data.configPath : ''
     configDir.value = response.data && response.data.configDir ? response.data.configDir : ''
     applyDefaultAutoStartPath()
   } catch (_error) {
     isDebugMode.value = false
     isAdmin.value = false
+    isUiAccess.value = false
     appVersion.value = '0.0.0'
     defaultExePath.value = ''
+    uiAccessDllExists.value = false
     configPath.value = ''
     configDir.value = ''
   }
@@ -473,6 +527,10 @@ const applyDefaultAutoStartPath = () => {
   if (!config.value || !config.value.webConfig) return
   if (!config.value.webConfig.adminAutoStartPath && defaultExePath.value) {
     config.value.webConfig.adminAutoStartPath = defaultExePath.value
+  }
+  if (!uiAccessAutoFilled && uiAccessDllExists.value) {
+    uiAccessAutoFilled = true
+    showToast('已检测到 uiaccess.dll，可启用 UIAccess。', 'success')
   }
 }
 
@@ -505,31 +563,73 @@ const saveConfig = async () => {
         adminTopmostEnabled: Boolean(config.value.webConfig.adminTopmostEnabled),
         adminAutoStartEnabled: Boolean(config.value.webConfig.adminAutoStartEnabled),
         adminAutoStartPath: String(config.value.webConfig.adminAutoStartPath || ''),
-        adminAutoStartTaskName: String(config.value.webConfig.adminAutoStartTaskName || 'Blue Random (Admin)')
+        adminAutoStartTaskName: String(config.value.webConfig.adminAutoStartTaskName || 'Blue Random (Admin)'),
+        uiAccessEnabled: Boolean(config.value.webConfig.uiAccessEnabled)
       }
     }
 
     await axios.post(`${apiBase}/config`, payload)
     addLog('success', '配置已保存并生效')
-    window.alert('配置已保存并生效。')
+    showToast('配置已保存并生效', 'success')
   } catch (error) {
     console.error('保存配置失败:', error)
     addLog('error', '保存失败，请检查输入内容')
-    window.alert('保存失败，请检查输入内容。')
+    showToast('保存失败，请检查输入内容', 'error')
   }
+}
+
+const showToast = (message, type = 'info', duration = 2400) => {
+  const id = `${Date.now()}-${toastSeed++}`
+  toasts.value.unshift({ id, message, type, duration })
+  if (toasts.value.length > 3) {
+    const overflow = toasts.value.splice(3)
+    overflow.forEach((toast) => {
+      const timer = toastTimers.get(toast.id)
+      if (timer) {
+        clearTimeout(timer)
+        toastTimers.delete(toast.id)
+      }
+    })
+  }
+  const timer = setTimeout(() => {
+    toasts.value = toasts.value.filter(item => item.id !== id)
+    toastTimers.delete(id)
+  }, duration)
+  toastTimers.set(id, timer)
 }
 
 const requestAdminElevation = async () => {
   try {
     const response = await axios.post(`${apiBase}/admin/elevate`)
     addLog('info', response.data?.message || '已发送管理员权限请求')
-    window.alert(response.data?.message || '已发送管理员权限请求。')
+    showToast(response.data?.message || '已发送管理员权限请求', 'info')
   } catch (error) {
     console.error('申请管理员权限失败:', error)
     const message = error?.response?.data?.message || '申请管理员权限失败'
     addLog('error', message)
-    window.alert(`${message}，请查看日志。`)
+    showToast(`${message}，请查看日志。`, 'error')
   }
+}
+
+const onUiAccessToggle = () => {
+  if (!config.value.webConfig.uiAccessEnabled) return
+  uiAccessEnablePending.value = true
+  uiAccessPromptOpen.value = true
+}
+
+const confirmUiAccessEnable = () => {
+  uiAccessEnablePending.value = false
+  uiAccessPromptOpen.value = false
+  if (!uiAccessDllExists.value) {
+    config.value.webConfig.uiAccessEnabled = false
+    showToast('未检测到 uiaccess.dll，无法启用 UIAccess。', 'error')
+  }
+}
+
+const cancelUiAccessEnable = () => {
+  uiAccessEnablePending.value = false
+  uiAccessPromptOpen.value = false
+  config.value.webConfig.uiAccessEnabled = false
 }
 
 const createAdminStartupTask = async () => {
@@ -540,16 +640,16 @@ const createAdminStartupTask = async () => {
       taskName: String(config.value.webConfig.adminAutoStartTaskName || 'Blue Random (Admin)').trim()
     }
     if (!payload.exePath) {
-      window.alert('请先填写可执行文件路径。')
+      showToast('请先填写可执行文件路径。', 'error')
       return
     }
     const response = await axios.post(`${apiBase}/task/create-admin-startup`, payload)
     addLog('success', response.data?.message || '计划任务已创建或更新')
-    window.alert(response.data?.message || '计划任务已创建或更新。')
+    showToast(response.data?.message || '计划任务已创建或更新', 'success')
   } catch (error) {
     console.error('创建计划任务失败:', error)
     addLog('error', '创建计划任务失败')
-    window.alert('创建计划任务失败，请查看日志。')
+    showToast('创建计划任务失败，请查看日志。', 'error')
   }
 }
 
@@ -557,12 +657,12 @@ const openConfigFile = async () => {
   try {
     const response = await axios.post(`${apiBase}/config/open-file`)
     addLog('success', response.data?.message || '已打开配置文件')
-    window.alert(response.data?.message || '已打开配置文件。')
+    showToast(response.data?.message || '已打开配置文件', 'success')
   } catch (error) {
     console.error('打开配置文件失败:', error)
     const message = error?.response?.data?.message || '打开配置文件失败'
     addLog('error', message)
-    window.alert(`${message}，请查看日志。`)
+    showToast(`${message}，请查看日志。`, 'error')
   }
 }
 
@@ -570,12 +670,25 @@ const openConfigDir = async () => {
   try {
     const response = await axios.post(`${apiBase}/config/open-dir`)
     addLog('success', response.data?.message || '已打开配置目录')
-    window.alert(response.data?.message || '已打开配置目录。')
+    showToast(response.data?.message || '已打开配置目录', 'success')
   } catch (error) {
     console.error('打开配置目录失败:', error)
     const message = error?.response?.data?.message || '打开配置目录失败'
     addLog('error', message)
-    window.alert(`${message}，请查看日志。`)
+    showToast(`${message}，请查看日志。`, 'error')
+  }
+}
+
+const requestAppRestart = async () => {
+  try {
+    await axios.post(`${apiBase}/restart`)
+    addLog('info', '已触发重启')
+    showToast('已触发重启', 'info')
+  } catch (error) {
+    console.error('触发重启失败:', error)
+    const message = error?.response?.data?.message || '触发重启失败'
+    addLog('error', message)
+    showToast(`${message}，请查看日志。`, 'error')
   }
 }
 
@@ -589,6 +702,23 @@ onMounted(() => {
 <style scoped>
 * {
   box-sizing: border-box;
+}
+
+/* 现代化滚动条样式 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(102, 204, 255, 0.283);
+  border-radius: 12px;
+  transition: background 0.3s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(49, 193, 233, 0.135);
 }
 
 :global(html),
@@ -611,6 +741,234 @@ onMounted(() => {
     #eef3fb;
   color: #0f1f3b;
   overflow: hidden;
+}
+
+.uiaccess-toast {
+  position: relative;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(120, 148, 185, 0.4);
+  border-radius: 16px;
+  box-shadow: 0 16px 36px rgba(10, 24, 52, 0.18);
+  padding: 16px 16px 14px;
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.uiaccess-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #12223b;
+  margin-bottom: 6px;
+}
+
+.uiaccess-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #48658f;
+}
+
+.uiaccess-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.uiaccess-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #1f6ef1;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(24, 72, 156, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.uiaccess-btn:hover {
+  background: #195fce;
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px rgba(24, 72, 156, 0.28);
+}
+
+.uiaccess-btn.secondary {
+  background: rgba(227, 235, 248, 0.95);
+  color: #2c4a72;
+  box-shadow: none;
+}
+
+.uiaccess-btn.secondary:hover {
+  background: rgba(210, 224, 242, 0.95);
+  transform: translateY(-1px);
+}
+
+.uiaccess-fly-enter-active {
+  animation: uiaccess-fly-in 0.28s ease-out;
+}
+
+.uiaccess-fly-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.uiaccess-fly-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}
+
+@keyframes uiaccess-fly-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.uiaccess-panel {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+
+.uiaccess-panel.disabled {
+  opacity: 0.72;
+}
+
+.uiaccess-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(142, 142, 142, 0.696);
+  border: 1px dashed rgba(150, 170, 200, 0.6);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #ffffff;
+  text-align: center;
+  padding: 12px;
+  pointer-events: auto;
+}
+
+.uiaccess-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1c5a2d;
+  background: rgba(210, 244, 222, 0.9);
+  border: 1px solid rgba(140, 200, 160, 0.7);
+}
+
+.toast-stack {
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  width: min(360px, calc(100% - 44px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.toast-stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toast {
+  position: relative;
+  padding: 20px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 26px rgba(10, 24, 52, 0.18);
+  border: 1px solid rgba(120, 148, 185, 0.35);
+  background: rgba(245, 249, 255, 0.96);
+  color: #1f3b63;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.toast-text {
+  padding-right: 6px;
+}
+
+.toast.toast-success {
+  background: rgba(230, 246, 235, 0.96);
+  color: #1f6f3d;
+  border-color: rgba(134, 192, 146, 0.45);
+}
+
+.toast.toast-error {
+  background: rgba(255, 236, 236, 0.96);
+  color: #b33939;
+  border-color: rgba(220, 150, 150, 0.55);
+}
+
+.toast-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: rgba(31, 110, 241, 0.6);
+  animation-name: save-toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.toast.toast-success .toast-bar {
+  background: rgba(45, 140, 83, 0.65);
+}
+
+.toast.toast-error .toast-bar {
+  background: rgba(179, 57, 57, 0.7);
+}
+
+.toast-stack-enter-active {
+  animation: save-toast-in 0.24s ease-out;
+}
+
+.toast-stack-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast-stack-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@keyframes save-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes save-toast-progress {
+  from {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  to {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
 }
 
 .layout {
@@ -835,10 +1193,67 @@ textarea::placeholder {
 }
 
 input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  background-color: rgba(160, 175, 195, 0.6);
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+  flex-shrink: 0;
+  margin: 0;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
   width: 18px;
   height: 18px;
-  accent-color: #2a6bff;
-  border-radius: 5px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s ease, left 0.2s ease;
+}
+
+input[type="checkbox"]:hover {
+  background-color: rgba(140, 160, 185, 0.8);
+}
+
+input[type="checkbox"]:checked {
+  background-color: #66ccff;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 4px 10px rgba(42, 107, 255, 0.2);
+}
+
+input[type="checkbox"]:checked::after {
+  transform: translateX(16px);
+}
+
+input[type="checkbox"]:checked:hover {
+  background-color: #1bcc97;
+}
+
+input[type="checkbox"]:active {
+  transform: scale(0.95);
+}
+
+input[type="checkbox"]:active::after {
+  width: 24px;
+}
+
+input[type="checkbox"]:checked:active::after {
+  transform: translateX(10px);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .row {
@@ -850,22 +1265,21 @@ input[type="checkbox"] {
 .save-btn {
   margin-top: 20px;
   width: 100%;
-  border: 0;
+  border: 2px solid rgba(255, 174, 0, 0.989);
   border-radius: 12px;
   padding: 13px 14px;
   color: #0f1f3b;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  background: linear-gradient(135deg, #f1f601, #f3b703);
-  box-shadow: 0 10px 20px rgba(32, 63, 115, 0.2);
-  transition: background 0.2s ease;
+  background: rgb(255, 230, 68);
+  transition: all 0.3s ease;
   
 }
 
 .save-btn:hover {
-  background: linear-gradient(135deg, #bdd6ff, #eef3ff);
-  
+  background: #bdd6ff;
+  border: 2px solid #05d5ff;
 }
 
 .update-header {
@@ -890,8 +1304,8 @@ input[type="checkbox"] {
 .update-btn {
   border: 0;
   margin-top: 3px;
-  border-radius: 10px;
-  padding: 8px 16px;
+  border-radius: 8px;
+  padding: 4px 12px;
   font-weight: 700;
   cursor: pointer;
   background: linear-gradient(135deg, #5aa6ff, #2c6df5);
@@ -976,6 +1390,10 @@ input[type="checkbox"] {
   border-color: rgba(255, 68, 249, 0.4);
 }
 
+.admin-block.uiaccess-block {
+  background: rgba(255, 247, 247, 0.7);
+  border-color: rgba(255, 138, 134, 0.5);
+}
 .admin-title {
   margin: 0 0 8px;
   font-weight: 700;

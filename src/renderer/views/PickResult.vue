@@ -334,8 +334,11 @@ onBeforeUnmount(() => {
 .result-hint {
   margin: 0;
   font-size: 16px;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgb(255, 255, 255);
   letter-spacing: 2px;
+  border: 2px dashed rgba(255, 255, 255, 0.75);
+  padding: 4px 12px;
+  border-radius: 12px;
 }
 
 .result-empty {

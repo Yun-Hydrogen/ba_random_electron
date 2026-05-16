@@ -37,6 +37,7 @@
 - 悬浮按钮参数
 - 抽取背景音乐与音效
 - Web 配置端口
+- 管理员置顶 / UIAccess 置顶增强
 
 ## Web 配置入口 🌐
 托盘菜单可打开 Web 配置页；也可直接访问：（默认端口为21219）
@@ -53,14 +54,22 @@ http://localhost:21219/#/config
 
 
 ## 说明 🧠
-- **本项目大部分由 AI 生成与改写。作者对 Electron 与 Vue 开发并不熟悉，如有不完善之处，欢迎指正与贡献改进。**
+- **本项目大部分由 AI 生成与改写。作者对 Electron 与 Vue 开发几乎不熟悉，如有不完善之处，欢迎指正与贡献改进。**
 - **本项目采用了部分第三方美术资源，项目作者并没有获得授权，如造成侵权请联系删除。**
+
+## UIAccess 增强置顶 ✅
+- UIAccess 置顶增强为可选功能，默认关闭，可根据需要启动。
+- 本项目不内置 UIAccess 组件，需自行获取 [RunUIAccess](https://github.com/shc0743/RunUIAccess) 并提供其中的 `uiaccess.dll`。
+- 功能目的仅用于增强悬浮按钮置顶能力；使用前请确认符合当地法律法规及组织政策。
+- 启用该功能可能触发安全软件告警，项目作者对其使用方式与后果不承担责任。
 
 ## 许可证 📄
 - 除项目 **/public/** 下的图片和音乐资源，项目使用 **AGPLv3** 许可证。
 - 项目 **/public/** 下的图片和音乐资源由各自版权方所有，使用时请注意授权和范围。
+- Uiaccess.dll 来自 [RunUIAccess](https://github.com/shc0743/RunUIAccess) ，使用 MIT 协议 [License](/THIRD_PARTY_NOTICES/RunUIAccess-MIT.txt)
 
 ## 感谢 💕
 - 《蔚蓝档案(Blue Archive)》游戏提供的灵感：
 [国服](https://bluearchive-cn.com/)  [国际服](https://bluearchive.nexon.com/home) [日服](https://bluearchive.jp/)
 - 音乐 **KARUT** 的 **《Connected Sky》**。
+- [RunUIAccess](https://github.com/shc0743/RunUIAccess)

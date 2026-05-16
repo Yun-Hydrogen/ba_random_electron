@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 14px;
   font-weight: 700;
-  color: #0b2a55;
+  color: #0b3955;
   background: #e3e9f3;
   box-shadow: 0 10px 16px rgba(19, 35, 62, 0.2);
   transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
@@ -340,7 +340,7 @@ onBeforeUnmount(() => {
 .pick-range-hint {
   text-align: center;
   color: rgba(15, 35, 66, 0.78);
-  font-size: 13px;
+  font-size: 16px;
   letter-spacing: 0.3px;
 }
 
@@ -348,21 +348,19 @@ onBeforeUnmount(() => {
   width: 70px;
   height: 70px;
   border-radius: 15%;
-  border: none;
+  border: 2px dashed #88d1ff;
   cursor: pointer;
   font-size: 60px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #101a8c;
-  background: #cfd7e4;
-  box-shadow: 0 14px 28px rgba(10, 30, 68, 0.38);
+  color: #1a61ad;
+  background: #ffffffb0;
   transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
 }
 
 .pick-circle-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
   filter: brightness(1.08);
   box-shadow: 0 18px 30px rgba(9, 27, 58, 0.42);
 }
@@ -373,9 +371,10 @@ onBeforeUnmount(() => {
 
 .pick-circle-btn:disabled {
   cursor: not-allowed;
-  background: linear-gradient(180deg, #aab3be, #969faa);
+  background: #747474;
   color: rgba(255, 255, 255, 0.7);
   box-shadow: none;
+  border: 2px dashed #000000;
 }
 
 .pick-count-box {
@@ -412,12 +411,7 @@ onBeforeUnmount(() => {
 }
 
 .pick-action-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
   filter: brightness(1.04);
-}
-
-.pick-action-btn:active:not(:disabled) {
-  transform: translateY(1px) scale(0.992);
 }
 
 .pick-action-btn:disabled {
@@ -435,8 +429,8 @@ onBeforeUnmount(() => {
 
 .pick-action-confirm {
   color: #3a2800;
-  background: #fffb13e2;
-  box-shadow: 0 10px 18px rgba(92, 68, 0, 0.28);
+  background: #ffe713e2;
+  border: 2px solid #ffbf00;
 }
 
 .pick-music-row {

@@ -29,6 +29,7 @@
 - `updateState`：更新检查状态（按钮状态、提示文案、链接）。
 - `isDebugMode`：是否调试模式（来自 `/api/app-info`）。
 - `appVersion`：当前版本号（来自 `/api/app-info`）。
+- `toasts`：右上角通知队列（最多 3 条）。
 
 ## 主要方法与职责
 - `switchTab(tab)`：切换标签页，设置左右滑动动画。
@@ -45,6 +46,7 @@
 - `requestAdminElevation()`：请求管理员权限并重启。
 - `createAdminStartupTask()`：创建/更新管理员权限开机计划任务。
 - `fetchAppInfo()`：GET `/api/app-info` 获取 `isDebugMode` 与版本号。
+- `showToast(message, type, duration)`：统一消息提示（替代 `window.alert`），右上角堆叠展示并带倒计时条。
 - 名单处理：
   - `syncTextToList()`：文本解析为去重名单 + 权重。
   - `syncListToText()`：名单回写成文本。
@@ -74,6 +76,7 @@
 - 内部滚动（左侧配置区域）：为了防止深层嵌套导致元素越界或引发整个页面的滚动，在 Tab 容器应用了严格的滚动与高度限制：
   - `.tab-container` 必须设置 `overflow-y: scroll`，以处理超出部分并在容器内部分解滚动。
   - `.tab-content` 必须设置 `height: 100%`，约束自身的高度必须遵循祖先节点分配的高度边界。
+- 通知提示：右上角 `toast` 堆叠提示，带倒计时条；关闭与进场都有轻量动画。
 - 右侧日志：`.panel-right` 设置 `max-height`，`.log-list` 滚动。
 - 长日志：`.log-text` 使用 `word-break` + `overflow-wrap`。
 - 徽章：`.debug-badge`（蓝色）、`.version-badge`（浅色）。
@@ -97,3 +100,4 @@
 - 如果新增配置项，必须同时修改 `config` 默认值、`fetchConfig()` 读取、`saveConfig()` payload。
 - 更新检查失败时建议保留 `debug` 输出，便于定位代理/网络问题。
 - Tab 名称与 `tabs` 数组需一致，否则切换动画会错位。
+- WebConfig 内不要使用 `window.alert`/`window.confirm`，统一改用 `showToast()` 与自定义弹窗。

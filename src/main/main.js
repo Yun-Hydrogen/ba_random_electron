@@ -37,13 +37,22 @@ const DEFAULT_CONFIG = {
     adminTopmostEnabled: false,
     adminAutoStartEnabled: false,
     adminAutoStartPath: '',
-    adminAutoStartTaskName: 'Blue Random (Admin)'
+    adminAutoStartTaskName: 'Blue Random (Admin)',
+    uiAccessEnabled: false
   }
 };
 
 const IS_WINDOWS = process.platform === 'win32';
 const ADMIN_TASK_DEFAULT_NAME = 'Blue Random (Admin)';
 const USERDATA_DIR_NAME = 'BlueRandom';
+const UIACCESS_ARG = '--uiaccess';
+const IS_UIACCESS_PROCESS = process.argv.includes(UIACCESS_ARG);
+
+if (IS_UIACCESS_PROCESS) {
+  // 只禁用 DirectComposition。这将会修复 UIAccess 层级下的窗口透明渲染问题，
+  // 同时保留应用内部的 GPU 硬件加速 (CSS, Canvas, WebGL 依然全速运行)，最大程度避免性能降级。
+  app.commandLine.appendSwitch('disable-direct-composition');
+}
 
 function configureUserDataPath() {
   if (!IS_WINDOWS) {
@@ -144,6 +153,13 @@ function getPowerShellPath() {
   return fs.existsSync(psPath) ? psPath : 'powershell';
 }
 
+function getRundll32Path() {
+  if (!IS_WINDOWS) return 'rundll32.exe';
+  const root = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const dllPath = path.join(root, 'System32', 'rundll32.exe');
+  return fs.existsSync(dllPath) ? dllPath : 'rundll32.exe';
+}
+
 function isProcessElevated() {
   if (!IS_WINDOWS) return false;
   try {
@@ -192,6 +208,66 @@ function requestAdminRelaunch() {
 
 function getDefaultExePath() {
   return app.getPath('exe');
+}
+
+function getDefaultUiAccessDllPath() {
+  const exeDir = path.dirname(getDefaultExePath());
+  return path.join(exeDir, 'uiaccess.dll');
+}
+
+function buildUiAccessCommandLine(exePath, args) {
+  const quote = (value) => `"${String(value).replace(/"/g, '\\"')}"`;
+  const safeArgs = Array.isArray(args) ? args : [];
+  return [quote(exePath), ...safeArgs.map(arg => quote(arg))].join(' ');
+}
+
+function requestUiAccessRelaunch(uiAccessDllPath) {
+  if (!IS_WINDOWS) {
+    return { ok: false, message: '当前系统不支持 UIAccess。' };
+  }
+  if (!app.isPackaged) {
+    return { ok: false, message: 'UIAccess 仅支持正式版运行。' };
+  }
+  if (!uiAccessDllPath || !fs.existsSync(uiAccessDllPath)) {
+    return { ok: false, message: '未找到 uiaccess.dll，请检查路径。' };
+  }
+
+  const exePath = getDefaultExePath();
+  const exeDir = path.dirname(exePath);
+  const baseArgs = process.argv.slice(1);
+  const args = baseArgs.includes(UIACCESS_ARG) ? baseArgs : [...baseArgs, UIACCESS_ARG];
+  const cmdLine = buildUiAccessCommandLine(exePath, args);
+  const entry = `${uiAccessDllPath},run`;
+  const rundll32Path = getRundll32Path();
+  const psPath = getPowerShellPath();
+  const script = [
+    `$entry = '${quoteForPowerShell(entry)}'`,
+    `$cmdLine = '${quoteForPowerShell(cmdLine)}'`,
+    `Start-Process -FilePath '${quoteForPowerShell(rundll32Path)}' -ArgumentList @($entry, $cmdLine) -WorkingDirectory '${quoteForPowerShell(exeDir)}'`
+  ].join('; ');
+  const result = spawnSync(psPath, ['-NoProfile', '-Command', script], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
+
+  if (result.error || result.status !== 0) {
+    const detailParts = [
+      result.error ? `error=${String(result.error)}` : '',
+      typeof result.status === 'number' ? `status=${result.status}` : '',
+      result.stderr ? `stderr=${result.stderr}` : '',
+      result.stdout ? `stdout=${result.stdout}` : ''
+    ].filter(Boolean);
+    detailParts.push(`rundll32=${rundll32Path}`);
+    detailParts.push(`entry=${entry}`);
+    detailParts.push(`cmdLine=${cmdLine}`);
+    detailParts.push(`cwd=${exeDir}`);
+    detailParts.push(`ps=${psPath}`);
+    const detail = detailParts.join('\n').trim();
+    console.error('UIAccess relaunch failed:', detail || 'command failed');
+    return { ok: false, message: 'UIAccess 请求失败或被取消。', detail: detail || 'command failed' };
+  }
+
+  return { ok: true, message: '已请求 UIAccess 权限，即将重新启动。' };
 }
 
 function createAdminStartupTask({ taskName, exePath, runAsUser }) {
@@ -324,7 +400,11 @@ function normalizeConfig(input) {
       adminAutoStartTaskName:
         typeof web.adminAutoStartTaskName === 'string' && web.adminAutoStartTaskName.trim()
           ? web.adminAutoStartTaskName.trim()
-          : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName
+          : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName,
+      uiAccessEnabled:
+        typeof web.uiAccessEnabled === 'boolean'
+          ? web.uiAccessEnabled
+          : DEFAULT_CONFIG.webConfig.uiAccessEnabled
     }
   };
 }
@@ -435,6 +515,8 @@ function toConfigYamlWithComments(config) {
     `  adminAutoStartPath: ${yamlSingleQuote(web.adminAutoStartPath)}`,
     '  # 计划任务名称',
     `  adminAutoStartTaskName: ${yamlSingleQuote(web.adminAutoStartTaskName || ADMIN_TASK_DEFAULT_NAME)}`,
+    '  # 管理员身份运行时自动使用 UIAccess（需要 uiaccess.dll 随包分发）',
+    `  uiAccessEnabled: ${web.uiAccessEnabled ? 'true' : 'false'}`,
     ''
   ].join('\n');
 }
@@ -773,7 +855,7 @@ async function checkUpdateFromMain() {
     ok: true,
     status: 'easter',
     title: `这是为什么呢？${localVersion}`,
-    detail: '为什么你的版本比最新发布的版本还要新呢？',
+    detail: '看起来你正在使用来自未来的版本...',
     commitUrl,
     releaseUrl: release.html_url || `https://github.com/${repoOwner}/${repoName}/releases/latest`,
     localVersion,
@@ -798,11 +880,14 @@ function createConfigServerRequestHandler() {
     }
 
     if (req.method === 'GET' && requestUrl === '/api/app-info') {
+      const uiAccessDefaultPath = getDefaultUiAccessDllPath();
       return sendJson(res, 200, {
         version: app.getVersion(),
         isDebugMode,
         isAdmin: isProcessElevated(),
         exePath: getDefaultExePath(),
+        uiAccessDllExists: fs.existsSync(uiAccessDefaultPath),
+        isUiAccess: process.argv.includes(UIACCESS_ARG),
         configPath: getConfigPath(),
         configDir: getConfigDir()
       });
@@ -926,6 +1011,7 @@ function createConfigServerRequestHandler() {
       }, 150);
       return;
     }
+
 
     if (req.method === 'POST' && requestUrl === '/api/task/create-admin-startup') {
       try {
@@ -1558,6 +1644,22 @@ ipcMain.on('floating-button:set-ignore-mouse', (event, ignore) => {
 
 app.whenReady().then(() => {
   const startupConfig = refreshConfig();
+  if (startupConfig.webConfig && startupConfig.webConfig.uiAccessEnabled && IS_WINDOWS && !process.argv.includes(UIACCESS_ARG)) {
+    if (isProcessElevated()) {
+      const dllPath = getDefaultUiAccessDllPath();
+      if (fs.existsSync(dllPath)) {
+        const result = requestUiAccessRelaunch(dllPath);
+        if (result.ok) {
+          isQuitting = true;
+          app.exit(0);
+          return;
+        }
+        console.error('UIAccess auto relaunch failed:', result.detail || result.message || 'unknown error');
+      } else {
+        console.error('UIAccess dll missing:', dllPath);
+      }
+    }
+  }
   if (startupConfig.webConfig && startupConfig.webConfig.adminTopmostEnabled && IS_WINDOWS && !isProcessElevated()) {
     const result = requestAdminRelaunch();
     if (result.ok) {
