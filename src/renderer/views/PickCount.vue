@@ -327,6 +327,71 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 30px;
+  height: 16px;
+  border-radius: 11px;
+  background-color: rgba(160, 175, 195, 0.6);
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+  flex-shrink: 0;
+  margin: 0;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+
+input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 13px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s ease, left 0.2s ease;
+}
+
+input[type="checkbox"]:hover {
+  background-color: rgba(140, 160, 185, 0.8);
+}
+
+input[type="checkbox"]:checked {
+  background-color: #66ccff;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 4px 10px rgba(42, 107, 255, 0.2);
+}
+
+input[type="checkbox"]:checked::after {
+  transform: translateX(16px);
+}
+
+input[type="checkbox"]:checked:hover {
+  background-color: #1bcc97;
+}
+
+input[type="checkbox"]:active {
+  transform: scale(0.95);
+}
+
+input[type="checkbox"]:active::after {
+  width: 24px;
+}
+
+input[type="checkbox"]:checked:active::after {
+  transform: translateX(10px);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .pick-overlay {
   width: 100%;
   height: 100%;
@@ -344,7 +409,7 @@ onBeforeUnmount(() => {
 .pick-panel {
   width: min(560px, 92vw);
   border-radius: 20px;
-  padding: 30px 30px 20px;
+  padding: 30px 30px 10px;
   background: #eff6ff;
   border: 1px solid rgba(255, 255, 255, 0.76);
   box-shadow:
@@ -514,14 +579,8 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 9px;
   color: rgba(17, 39, 71, 0.9);
-  font-size: 14px;
+  font-size: 12px;
   letter-spacing: 0.4px;
-}
-
-.pick-checkbox {
-  width: 17px;
-  height: 17px;
-  accent-color: #2662ad;
 }
 
 @keyframes pick-overlay-fade-in {

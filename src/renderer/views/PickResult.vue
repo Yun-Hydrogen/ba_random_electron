@@ -349,6 +349,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+
 .result-stage {
   width: 100%;
   height: 100%;
@@ -415,6 +416,8 @@ onBeforeUnmount(() => {
   opacity: 0;
   transform: translateY(12px) scale(0.96);
   animation: none;
+  word-break: break-all;
+  word-wrap: break-word;
 }
 
 .name-card.is-reveal {
