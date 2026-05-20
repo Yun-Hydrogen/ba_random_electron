@@ -19,6 +19,36 @@ const path = require('path');
 let configServer = null;
 let configServerPort = null;
 let serverDeps = null;
+const configEventClients = new Set();
+
+function broadcastConfigRefresh(reason = 'refresh') {
+  const payload = {
+    type: 'config-refresh',
+    reason,
+    time: new Date().toISOString()
+  };
+  const message = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const res of configEventClients) {
+    res.write(message);
+  }
+}
+
+function handleConfigEventStream(req, res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.write('\n');
+
+  configEventClients.add(res);
+  broadcastConfigRefresh('connect');
+
+  req.on('close', () => {
+    configEventClients.delete(res);
+  });
+}
 
 // 简单的静态文件 MIME 映射
 function getMimeType(filePath) {
@@ -135,6 +165,12 @@ function createConfigServerRequestHandler() {
       return;
     }
 
+    // SSE 配置刷新通知
+    if (req.method === 'GET' && requestUrl === '/api/config-events') {
+      handleConfigEventStream(req, res);
+      return;
+    }
+
     // 写入配置并刷新悬浮窗
     if (req.method === 'POST' && requestUrl === '/api/config') {
       try {
@@ -144,6 +180,7 @@ function createConfigServerRequestHandler() {
 
         startConfigServer();
         windows.refreshFloatingButtonWindow();
+        broadcastConfigRefresh('save');
 
         return sendJson(res, 200, {
           ok: true,
@@ -274,6 +311,7 @@ function startConfigServer(deps) {
   server.listen(desiredPort, '127.0.0.1', () => {
     configServerPort = desiredPort;
     console.log(`Config web server running at http://localhost:${desiredPort}`);
+    broadcastConfigRefresh('startup');
   });
 
   server.on('error', (error) => {

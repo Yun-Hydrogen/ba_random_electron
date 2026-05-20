@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 # WebConfig.vue 维护说明
 
 本文总结 [src/renderer/views/WebConfig.vue](src/renderer/views/WebConfig.vue) 的结构与方法，便于后续 AI 快速维护。
@@ -106,6 +106,25 @@
 <template>
   <main class="page">
     <teleport to="body">
+      <transition name="modal-fade">
+        <div v-if="config && config.agreedEula === false" class="modal-overlay" style="z-index: 10000; position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+          <div class="modal-content eula-modal" style="background: white; border-radius: 12px; padding: 28px; max-width: 520px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
+            <h2 style="margin-top: 0; margin-bottom: 16px; color: #1e3a8a; font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 24px;">📜</span> 用户协议
+            </h2>
+            <div class="eula-text" style="font-size: 14.5px; color: #4b5563; line-height: 1.6; margin-bottom: 28px; background: #f3f4f6; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb;">
+              <ol style="padding-left: 20px; margin: 0;">
+                <li style="margin-bottom: 12px;">代码部分使用 <strong>AGPLv3</strong> 许可证。</li>
+                <li style="margin-bottom: 12px;">项目 <strong>/public/</strong> 下的图片和音乐资源由各自版权方所有，使用时请注意授权和范围。</li>
+                <li>代码及其编译出来的二进制程序<strong>不可售卖及商用</strong>。</li>
+              </ol>
+            </div>
+            <div class="modal-actions" style="display: flex; justify-content: stretch;">
+              <button type="button" @click="agreeEula" style="flex: 1; background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 15px; transition: all 0.2s; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);">我已阅读并同意</button>
+            </div>
+          </div>
+        </div>
+      </transition>
       <div class="toast-stack" role="status" aria-live="polite">
         <transition name="uiaccess-fly">
           <div v-if="uiAccessPromptOpen" class="uiaccess-toast">
@@ -373,7 +392,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 
 const tabs = ['list', 'students', 'floating', 'pickCount', 'web']
@@ -476,6 +495,7 @@ const checkUpdate = async () => {
 }
 let logSeed = 0
 let logSource = null
+let configEventSource = null
 
 const addLog = (level, text, timeOverride) => {
   const time = timeOverride || new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -503,9 +523,23 @@ const startLogStream = () => {
   logSource.onerror = () => {}
 }
 
+const startConfigEventStream = () => {
+  if (configEventSource) {
+    configEventSource.close()
+  }
+
+  configEventSource = new EventSource(`${apiBase}/config-events`)
+  configEventSource.onmessage = async () => {
+    await fetchConfig()
+    addLog('info', '配置已刷新')
+  }
+  configEventSource.onerror = () => {}
+}
+
 const config = ref({
   studentList: [],
   allowRepeatDraw: true,
+  agreedEula: false,
   floatingButton: {
     sizePercent: 100,
     transparencyPercent: 100,
@@ -639,12 +673,19 @@ const applyDefaultAutoStartPath = () => {
   }
 }
 
+const agreeEula = async () => {
+  config.value.agreedEula = true
+  await saveConfig()
+  showToast('协议已同意', 'success')
+}
+
 const saveConfig = async () => {
   try {
     syncTextToList()
     const payload = {
       studentList: config.value.studentList,
       allowRepeatDraw: Boolean(config.value.allowRepeatDraw),
+      agreedEula: Boolean(config.value.agreedEula),
       floatingButton: {
         sizePercent: Number(config.value.floatingButton.sizePercent),
         transparencyPercent: Number(config.value.floatingButton.transparencyPercent),
@@ -676,10 +717,12 @@ const saveConfig = async () => {
     await axios.post(`${apiBase}/config`, payload)
     addLog('success', '配置已保存并生效')
     showToast('配置已保存并生效', 'success')
+    return true
   } catch (error) {
     console.error('保存配置失败:', error)
     addLog('error', '保存失败，请检查输入内容')
     showToast('保存失败，请检查输入内容', 'error')
+    return false
   }
 }
 
@@ -722,12 +765,22 @@ const onUiAccessToggle = () => {
   uiAccessPromptOpen.value = true
 }
 
-const confirmUiAccessEnable = () => {
+const confirmUiAccessEnable = async () => {
   uiAccessEnablePending.value = false
   uiAccessPromptOpen.value = false
   if (!uiAccessDllExists.value) {
     config.value.webConfig.uiAccessEnabled = false
     showToast('未检测到 uiaccess.dll，无法启用 UIAccess。', 'error')
+    return
+  }
+  const saved = await saveConfig()
+  if (!saved) {
+    return
+  }
+  if (isAdmin.value) {
+    await requestAppRestart()
+  } else {
+    await requestAdminElevation()
   }
 }
 
@@ -800,7 +853,17 @@ const requestAppRestart = async () => {
 onMounted(() => {
   fetchConfig()
   startLogStream()
+  startConfigEventStream()
   fetchAppInfo()
+})
+
+onUnmounted(() => {
+  if (logSource) {
+    logSource.close()
+  }
+  if (configEventSource) {
+    configEventSource.close()
+  }
 })
 </script>
 
@@ -1765,4 +1828,22 @@ input[type="checkbox"]:disabled {
   opacity: 0;
   transform: translateX(20px);
 }
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+.modal-fade-enter-active .modal-content {
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-fade-enter-from .modal-content {
+  transform: scale(0.9);
+}
 </style>
+
+
+
+

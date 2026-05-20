@@ -1,4 +1,4 @@
-/*
+﻿/*
 技术文档：src/main/windows.js
 职责：主进程窗口管理与抽取执行。
 
@@ -196,8 +196,7 @@ function createFloatingButtonWindow() {
 
   const win = new BrowserWindow(windowOptions);
   floatingButtonWindow = win;
-
-  win.setIgnoreMouseEvents(true, { forward: true });
+  // win.setIgnoreMouseEvents(true, { forward: true });
 
   if (cfg.floatingButton.alwaysOnTop) {
     win.setAlwaysOnTop(true, 'screen-saver');
@@ -672,3 +671,4 @@ module.exports = {
   startFloatingWindowWatchdog,
   stopFloatingWindowWatchdog
 };
+

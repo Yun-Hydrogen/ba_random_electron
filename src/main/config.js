@@ -1,4 +1,4 @@
-/*
+﻿/*
 技术文档：src/main/config.js
 职责：配置读写与归一化。
 
@@ -21,6 +21,7 @@ const admin = require('./admin');
 const DEFAULT_CONFIG = {
   studentList: [],
   allowRepeatDraw: true,
+  agreedEula: false,
   floatingButton: {
     sizePercent: 100,
     transparencyPercent: 20,
@@ -69,6 +70,7 @@ function normalizeConfig(input) {
   const fb = source.floatingButton && typeof source.floatingButton === 'object' ? source.floatingButton : {};
   const allowRepeatDraw =
     typeof source.allowRepeatDraw === 'boolean' ? source.allowRepeatDraw : DEFAULT_CONFIG.allowRepeatDraw;
+  const agreedEula = typeof source.agreedEula === 'boolean' ? source.agreedEula : DEFAULT_CONFIG.agreedEula;
   const position = fb.position && typeof fb.position === 'object' ? fb.position : {};
   const pick = source.pickCountDialog && typeof source.pickCountDialog === 'object' ? source.pickCountDialog : {};
   const pickResult = source.pickResultDialog && typeof source.pickResultDialog === 'object' ? source.pickResultDialog : {};
@@ -80,6 +82,7 @@ function normalizeConfig(input) {
   return {
     studentList: students,
     allowRepeatDraw,
+    agreedEula,
     floatingButton: {
       sizePercent: clampNumber(
         fb.sizePercent,
@@ -231,6 +234,7 @@ function toConfigYamlWithComments(config) {
     '# 抽取名单列表',
     `studentList:${studentLines}`,
     `allowRepeatDraw: ${config.allowRepeatDraw ? 'true' : 'false'}`,
+      `agreedEula: ${config.agreedEula ? 'true' : 'false'}`,
     '',
     '# 悬浮按钮配置',
     'floatingButton:',
@@ -341,3 +345,9 @@ module.exports = {
   saveConfig,
   writeDefaultConfigIfMissing
 };
+
+
+
+
+
+

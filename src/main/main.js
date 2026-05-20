@@ -1,4 +1,4 @@
-/*
+﻿/*
 技术文档：src/main/main.js
 职责：主进程引导入口（Bootstrap）。
 
@@ -109,6 +109,25 @@ app.whenReady().then(() => {
     onQuit: () => app.quit()
   });
 
+  // 独立检查更新并发送通知 (不阻塞主线程)
+  update.checkUpdateFromMain().then(res => {
+    if (res.ok && res.status === 'update') {
+      const { Notification, shell } = require('electron');
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title: res.title || '发现新版本',
+          body: '点击此处前往下载页面',
+        });
+        notification.on('click', () => {
+          if (res.releaseUrl) shell.openExternal(res.releaseUrl);
+        });
+        notification.show();
+      }
+    }
+  }).catch(err => {
+    console.error('Auto update check failed:', err);
+  });
+
   // 预创建窗口，保证打开速度与状态一致
   windows.createFloatingButtonWindow();
   windows.createPickCountWindowInstance();
@@ -132,3 +151,4 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
   // Keep app resident in tray; explicit quit should come from tray menu.
 });
+

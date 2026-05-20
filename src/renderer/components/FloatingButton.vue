@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 # FloatingButton.vue 维护说明
 
 本文总结 [src/renderer/components/FloatingButton.vue](src/renderer/components/FloatingButton.vue) 的结构与方法，便于后续 AI 维护。
@@ -78,8 +78,7 @@
       @pointerleave="handlePointerLeave"
       title=""
     >
-      <img src="/image/random.svg" alt="随机抽取" draggable="false" />
-      <span class="floating-button-label" :style="textStyle">抽取</span>
+      <img src="/image/app.ico" alt="随机抽取" draggable="false" />
     </button>
   </div>
 </template>
@@ -193,11 +192,7 @@ function cancelScheduledMove() {
   }
 }
 
-function updateIgnoreMouse() {
-  if (!window.floatingButtonApi || !window.floatingButtonApi.setIgnoreMouseEvents) return
-  const shouldCapture = lastPointerType.value !== 'mouse' || pointerDown.value || isHovering.value
-  window.floatingButtonApi.setIgnoreMouseEvents(!shouldCapture)
-}
+function updateIgnoreMouse() {}
 
 function handlePointerEnter(event) {
   if (event.pointerType === 'mouse') {
@@ -206,12 +201,7 @@ function handlePointerEnter(event) {
   }
 }
 
-function handlePointerLeave(event) {
-  if (event.pointerType === 'mouse') {
-    isHovering.value = false
-    updateIgnoreMouse()
-  }
-}
+function handlePointerLeave(event) { isHovering.value = false; updateIgnoreMouse(); }
 
 function handlePointerDown(event) {
   if (event.pointerType === 'mouse' && event.button !== 0) return
@@ -309,7 +299,7 @@ function handlePointerCancel(event) {
 
 .floating-button {
   position: relative;
-  border: 0;
+  border: 3px dashed #66ccff;
   outline: none;
   -webkit-tap-highlight-color: transparent;
   border-radius: 16px;
@@ -319,12 +309,12 @@ function handlePointerCancel(event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background:  #66CCFFF0;
+  background:  #bfeafff0;
   transition: transform 300ms ease, box-shadow 300ms ease, background 300ms ease;
 }
 
 .floating-button.is-hovering:not(.is-dragging) {
-  background: #81ffea;
+  background: #66ccff;
 }
 
 .floating-button:active {
@@ -345,15 +335,5 @@ function handlePointerCancel(event) {
   pointer-events: none;
 }
 
-.floating-button-label {
-  position: absolute;
-  left: 50%;
-  bottom: 6px;
-  transform: translateX(-50%);
-  font-size: 12px;
-  line-height: 1;
-  color: rgb(255, 255, 255);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.38);
-  pointer-events: none;
-}
 </style>
+
