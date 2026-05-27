@@ -84,7 +84,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   sizePx: {
@@ -194,6 +194,19 @@ function cancelScheduledMove() {
 
 function updateIgnoreMouse() {}
 
+function clearHoverState() {
+  if (!isHovering.value) return
+  isHovering.value = false
+  updateIgnoreMouse()
+}
+
+function isPointerInside(event) {
+  if (!event || !event.currentTarget) return false
+  const rect = event.currentTarget.getBoundingClientRect()
+  return event.clientX >= rect.left && event.clientX <= rect.right
+    && event.clientY >= rect.top && event.clientY <= rect.bottom
+}
+
 function handlePointerEnter(event) {
   if (event.pointerType === 'mouse') {
     isHovering.value = true
@@ -268,6 +281,9 @@ function handlePointerUp(event) {
   pointerDown.value = false
   activePointerId.value = null
   isDragging.value = false
+  if (event.pointerType === 'mouse' && !isPointerInside(event)) {
+    clearHoverState()
+  }
   updateIgnoreMouse()
   if (event.currentTarget && event.currentTarget.releasePointerCapture) {
     event.currentTarget.releasePointerCapture(event.pointerId)
@@ -284,8 +300,32 @@ function handlePointerCancel(event) {
   pointerDown.value = false
   activePointerId.value = null
   isDragging.value = false
+  clearHoverState()
   updateIgnoreMouse()
 }
+
+function handleWindowMouseLeave(event) {
+  if (event && event.relatedTarget) return
+  clearHoverState()
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    clearHoverState()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('blur', clearHoverState)
+  window.addEventListener('mouseleave', handleWindowMouseLeave)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('blur', clearHoverState)
+  window.removeEventListener('mouseleave', handleWindowMouseLeave)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 </script>
 
 <style scoped>

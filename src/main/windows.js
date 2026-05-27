@@ -25,6 +25,7 @@ let pickResultWindow = null;
 let isPickResultWindowReady = false;
 let currentPickResults = [];
 let pickResultToken = 0;
+let activePickResultToken = 0;
 let floatingWindowWatchdog = null;
 let isDebugMode = false;
 let isQuitting = false;
@@ -391,6 +392,7 @@ function createPickCountWindow() {
 function closePickResultWindow() {
   if (!pickResultWindow || pickResultWindow.isDestroyed()) {
     currentPickResults = [];
+    activePickResultToken = 0;
     isFloatingHiddenForPickCount = false;
     fadeInFloatingButtonWindow();
     if (pickCountWindow && !pickCountWindow.isDestroyed()) {
@@ -399,26 +401,15 @@ function closePickResultWindow() {
     return;
   }
 
-  pickResultToken += 1;
-  pickResultWindow.webContents.send('pick-result:reset', {
-    token: pickResultToken,
-    reason: 'close'
-  });
-  pickResultWindow.setOpacity(0);
-  if (!pickResultWindow.isVisible()) {
-    pickResultWindow.show();
-  }
-  setTimeout(() => {
-    if (!pickResultWindow || pickResultWindow.isDestroyed()) {
-      return;
-    }
+  if (pickResultWindow.isVisible()) {
     pickResultWindow.hide();
-    pickResultWindow.setOpacity(1);
-  }, 60);
-
+  }
+  
   currentPickResults = [];
+  activePickResultToken = 0;
   isFloatingHiddenForPickCount = false;
   fadeInFloatingButtonWindow();
+  
   if (pickCountWindow && !pickCountWindow.isDestroyed()) {
     pickCountWindow.webContents.send('pick-count:stop-bgm');
   }
@@ -441,7 +432,6 @@ function createPickResultWindowInstance() {
     movable: false,
     alwaysOnTop: true,
     skipTaskbar: !isDebugMode,
-    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -472,16 +462,15 @@ function createPickResultWindowInstance() {
     pickResultWindow = null;
     isPickResultWindowReady = false;
     currentPickResults = [];
-    if (!isQuitting) {
-      isFloatingHiddenForPickCount = false;
-      fadeInFloatingButtonWindow();
-    }
+    activePickResultToken = 0;
   });
 }
 
 // 展示抽取结果
 function openPickResultWindow(results) {
   currentPickResults = Array.isArray(results) ? results : [];
+  pickResultToken += 1;
+  activePickResultToken = pickResultToken;
   createPickResultWindowInstance();
 
   if (!pickResultWindow || pickResultWindow.isDestroyed()) {
@@ -493,6 +482,7 @@ function openPickResultWindow(results) {
       return;
     }
     pickResultWindow.webContents.send('pick-result:open', {
+      token: activePickResultToken,
       results: currentPickResults
     });
     pickResultWindow.show();
@@ -671,4 +661,6 @@ module.exports = {
   startFloatingWindowWatchdog,
   stopFloatingWindowWatchdog
 };
+
+
 

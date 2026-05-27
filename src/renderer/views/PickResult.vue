@@ -1,7 +1,7 @@
 <!--
 # PickResult.vue 维护说明
 
-本文总结 [src/renderer/views/PickResult.vue](src/renderer/views/PickResult.vue) 的结构与方法，便于后续 AI 维护。
+本文总结 [src/renderer/views/PickResult.vue](src/renderer/views/PickResult.vue) 的结构与方法，便于后续维护。
 
 ## 模块概览
 - 作用：抽取结果展示页，包含信件飞入动画 + 姓名依次展开 + 抽取音效。
@@ -15,52 +15,32 @@
   - `bottomRow`：第 6 个及之后结果。
 - 卡片：`.letter-card` 信封图片，延迟入场动画。
 - 名字卡：`.name-card` 依次展开显示。
-- 提示文案：
-  - 有结果：`.result-hint`。
-  - 无结果：`.result-empty`。
+- 提示文案：有结果时显示 `.result-hint`，否则显示 `.result-empty`。
 
 ## 关键状态（Refs / Computed）
 - `results`：当前抽取结果数组（对象含 `name`）。
-- `animationKey`：用于重置动画的 key。
-- `instructionText`：底部提示文案。
+- `animationKey`：用于强制重置动画 DOM。
+- `stagePhase`：结果页状态机（`idle` | `opening` | `reveal` | `ready` | `closing`）。
 - `revealStarted`：是否开始展开姓名。
 - `canClose`：动画结束后才允许关闭。
-- `isClosing`：是否正在执行淡出关闭。
-- `lastToken`：结果批次序号，用于忽略过期 reset 事件。
-- `playGachaSound`：是否播放抽取音效。
-- `gachaSoundVolume`：音效音量。
+- `activeToken`：当前结果批次 token（主进程下发，用于忽略过期 reset）。
+- `isClosing`：`stagePhase === 'closing'` 的衍生状态。
 - `topRow` / `bottomRow` / `isTwoRows`：拆分结果并判断是否双排。
 
 ## 主要方法与职责
-- `resolveAssetUrl(relativePath)`：兼容 `file://` 与 `http://` 的资源路径解析。
 - `normalizeResults(payload)`：兼容多种结果格式，统一为 `{ name }[]`。
-- `applyResults(payload)`：
-  - 设置结果与动画 key。
-  - 写入 `payload.token`，标记当前批次。
-  - 重置展开状态与计时器。
-  - 根据结果数量计算展开延迟（`(n-1)*120 + 600` ms）。
-  - 关闭只在动画结束后允许（总时长约 `+450` ms）。
-  - 触发抽取音效播放。
-- `closeResult()`：
-  - 清空结果、停止音效、清理计时器。
-  - 先触发淡出动画（约 220ms），再等待一次渲染帧后通知主进程关闭。
-  - 通过 `window.pickResultApi.close()` 通知主进程关闭。
-- `handleStageClick()` / `handleKeydown()`：仅在 `canClose` 为 true 时允许关闭。
-- `handleReset(payload)`：根据 `token` 与 `reason` 忽略过期 reset，避免清空刚打开的结果。
-- `playGachaLoadingSound()`：创建/复用 `Audio` 播放音效，设置音量。
-- `stopGachaLoadingSound()`：暂停并归零音效。
-- `loadSoundConfig()`：读取 `window.pickResultApi.getConfig()` 获取 `defaultPlayGachaSound` 与音量。
+- `startSession(payload)`：
+  - 生成新的会话 ID，清理旧计时器与音效。
+  - 重置动画 key 与状态机。
+  - 根据结果数量计算展开延迟并设置 `revealStarted`、`canClose`。
+- `resetResultState()`：清理计时器、音效、结果，重置状态机。
+- `closeResult()`：触发淡出并通知主进程关闭窗口；使用会话 ID 避免旧计时器误伤。
+- `handleReset(payload)`：根据 token 忽略过期 reset，避免清空刚打开的结果。
+- `loadSoundConfig()` / `playGachaLoadingSound()` / `stopGachaLoadingSound()`：音效加载与播放。
 
 ## 生命周期
-- `onMounted()`：
-  - 加载音效配置。
-  - 读取初始结果 `getResults()` 并渲染。
-  - 监听 `pick-result:open` 事件，更新配置并渲染新结果。
-  - 监听 `pick-result:reset` 事件，清空结果并重置动画状态。
-- `onBeforeUnmount()`：
-  - 清理计时器与音效。
-  - 移除 `onOpen` 监听。
-  - 移除 `onReset` 监听。
+- `onMounted()`：加载音效配置，读取初始结果，绑定 `onOpen` / `onReset`。
+- `onBeforeUnmount()`：清理计时器与事件监听。
 
 ## IPC / API 依赖
 来自 `window.pickResultApi`：
@@ -73,21 +53,10 @@
 ## 动画与时序
 - 信封飞入：`.letter-card` 使用 `letter-fly-in` 动画，延迟 `index * 0.12s`。
 - 姓名展开：`.name-card.is-reveal` 使用 `name-reveal` 动画，延迟 `index * 0.12s + 0.1s`。
-- 展开启动：`applyResults()` 根据结果数量计算总延迟后设置 `revealStarted = true`。
-
-## 资源依赖
-- 信封图片：`/image/letter.png`
-- 抽取音效：`/sound/gacha_loading.wav`
-
-## 样式要点
-- `.result-stage` 作为遮罩层，背景为半透明黑。
-- `.letter-card` 初始 `scale(2.5)` + `rotate(15deg)`，落位后保持 15 度倾斜。
-- `.name-card` 初始透明 + 下移，触发 `is-reveal` 后展开。
 
 ## 维护注意事项
-- 若修改结果数量阈值（当前 5 个一行），需同步调整 `topRow` / `bottomRow` 与 `--index` 计算。
-- 音效配置来自主进程，新增字段时需同步更新 `loadSoundConfig()`。
-- 关闭逻辑集中在 `closeResult()`，若新增交互请调用该方法以保证清理完整。
+- 任何新增交互需调用 `closeResult()`，确保状态机与计时器正确清理。
+- token 由主进程下发，避免 reset 与 open 的竞态。
 -->
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
@@ -97,8 +66,9 @@ const animationKey = ref(0)
 const instructionText = ref('点击任意位置关闭')
 const revealStarted = ref(false)
 const canClose = ref(false)
-const isClosing = ref(false)
-const lastToken = ref(0)
+const stagePhase = ref('idle')
+const activeToken = ref(0)
+const isClosing = computed(() => stagePhase.value === 'closing')
 
 const resolveAssetUrl = (relativePath) => {
   const base = window.location.protocol === 'file:'
@@ -109,8 +79,10 @@ const resolveAssetUrl = (relativePath) => {
 const gachaSoundUrl = resolveAssetUrl('sound/gacha_loading.wav')
 let gachaAudio = null
 let revealTimer = null
-let closeTimer = null
+let readyTimer = null
 let closeFadeTimer = null
+let sessionSeed = 0
+let activeSessionId = 0
 
 const playGachaSound = ref(true)
 const gachaSoundVolume = ref(0.6)
@@ -132,72 +104,85 @@ function normalizeResults(payload) {
     .filter((item) => item && item.name)
 }
 
-function applyResults(payload) {
-  resetResultState({ stopSound: false })
-  results.value = normalizeResults(payload)
-  const token = Number(payload?.token)
-  if (Number.isFinite(token)) {
-    lastToken.value = token
-  }
-
-  if (results.value.length === 0) {
-    canClose.value = true
-    return
-  }
-
-  if (results.value.length > 0) {
-    const totalDelayMs = (Math.max(results.value.length - 1, 0) * 120) + 600
-    revealTimer = setTimeout(() => {
-      revealStarted.value = true
-    }, totalDelayMs)
-
-    const totalDurationMs = totalDelayMs + 450
-    closeTimer = setTimeout(() => {
-      canClose.value = true
-    }, totalDurationMs)
-  }
-
-  if (playGachaSound.value && results.value.length > 0) {
-    playGachaLoadingSound()
-  }
-}
-
-function resetResultState({ stopSound = true } = {}) {
-  results.value = []
-  animationKey.value += 1
-  revealStarted.value = false
-  canClose.value = false
-  isClosing.value = false
+function clearTimers() {
   if (revealTimer) {
     clearTimeout(revealTimer)
     revealTimer = null
   }
-  if (closeTimer) {
-    clearTimeout(closeTimer)
-    closeTimer = null
+  if (readyTimer) {
+    clearTimeout(readyTimer)
+    readyTimer = null
   }
   if (closeFadeTimer) {
     clearTimeout(closeFadeTimer)
     closeFadeTimer = null
   }
+}
+
+function resetResultState({ stopSound = true, clearResults = true } = {}) {
+  clearTimers()
+  if (clearResults) {
+    results.value = []
+  }
+  animationKey.value += 1
+  revealStarted.value = false
+  canClose.value = false
+  stagePhase.value = 'idle'
   if (stopSound) {
     stopGachaLoadingSound()
   }
 }
 
+function startSession(payload) {
+  sessionSeed += 1
+  activeSessionId = sessionSeed
+  resetResultState({ stopSound: true, clearResults: true })
+
+  results.value = normalizeResults(payload)
+  stagePhase.value = 'opening'
+
+  const token = Number(payload?.token)
+  if (Number.isFinite(token)) {
+    activeToken.value = token
+  } else {
+    activeToken.value += 1
+  }
+
+  if (results.value.length === 0) {
+    canClose.value = true
+    stagePhase.value = 'ready'
+    return
+  }
+
+  const sessionId = activeSessionId
+  const totalDelayMs = (Math.max(results.value.length - 1, 0) * 120) + 600
+  revealTimer = setTimeout(() => {
+    if (sessionId !== activeSessionId) return
+    revealStarted.value = true
+    stagePhase.value = 'reveal'
+  }, totalDelayMs)
+
+  const totalDurationMs = totalDelayMs + 450
+  readyTimer = setTimeout(() => {
+    if (sessionId !== activeSessionId) return
+    canClose.value = true
+    stagePhase.value = 'ready'
+  }, totalDurationMs)
+
+  if (playGachaSound.value) {
+    playGachaLoadingSound()
+  }
+}
+
 function handleReset(payload) {
   const token = Number(payload?.token)
-  const reason = payload?.reason
-  if (Number.isFinite(token)) {
-    if (reason === 'before-open' && token === lastToken.value) {
-      return
-    }
-    if (token < lastToken.value) {
-      return
-    }
-    lastToken.value = token
+  if (Number.isFinite(token) && token < activeToken.value) {
+    return
   }
-  resetResultState()
+  if (Number.isFinite(token)) {
+    activeToken.value = token
+  }
+  resetResultState({ stopSound: true, clearResults: true })
 }
 
 function handleStageClick() {
@@ -213,9 +198,23 @@ function handleKeydown(event) {
 
 async function closeResult() {
   if (isClosing.value) return
-  isClosing.value = true
+  stagePhase.value = 'closing'
+  canClose.value = false
+  const sessionId = activeSessionId
+  if (revealTimer) {
+    clearTimeout(revealTimer)
+    revealTimer = null
+  }
+  if (readyTimer) {
+    clearTimeout(readyTimer)
+    readyTimer = null
+  }
+
   closeFadeTimer = setTimeout(async () => {
-    resetResultState()
+    if (sessionId !== activeSessionId || stagePhase.value !== 'closing') {
+      return
+    }
+    resetResultState({ stopSound: true, clearResults: true })
     await nextTick()
     await new Promise((resolve) => window.requestAnimationFrame(resolve))
     if (window.pickResultApi) {
@@ -267,13 +266,13 @@ onMounted(async () => {
 
   if (window.pickResultApi && typeof window.pickResultApi.getResults === 'function') {
     const initial = await window.pickResultApi.getResults()
-    applyResults({ results: initial })
+    startSession({ results: initial })
   }
 
   if (window.pickResultApi && typeof window.pickResultApi.onOpen === 'function') {
     removeOpenListener = window.pickResultApi.onOpen(async (payload) => {
       await loadSoundConfig()
-      applyResults(payload)
+      startSession(payload)
     })
   }
 
@@ -285,18 +284,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  if (revealTimer) {
-    clearTimeout(revealTimer)
-    revealTimer = null
-  }
-  if (closeTimer) {
-    clearTimeout(closeTimer)
-    closeTimer = null
-  }
-  if (closeFadeTimer) {
-    clearTimeout(closeFadeTimer)
-    closeFadeTimer = null
-  }
+  clearTimers()
   stopGachaLoadingSound()
   if (typeof removeOpenListener === 'function') {
     removeOpenListener()
