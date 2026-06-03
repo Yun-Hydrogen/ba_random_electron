@@ -130,7 +130,6 @@ app.whenReady().then(() => {
 
   // 预创建窗口，保证打开速度与状态一致
   windows.createFloatingButtonWindow();
-  windows.createPickCountWindowInstance();
   windows.createPickResultWindowInstance();
   windows.startFloatingWindowWatchdog();
 

@@ -3,23 +3,22 @@
 职责：主进程窗口管理与抽取执行。
 
 核心功能：
-- 负责悬浮按钮、人数窗口、结果窗口的创建/显示/关闭。
+- 负责悬浮按钮窗口、抽取结果窗口的创建/显示/关闭。
 - 负责悬浮窗拖拽、透明动画、watchdog 常驻保障。
 - 实现按权重抽取学生（可重复与不可重复两种模式）。
 - 提供窗口状态 getter/setter 供其它模块协作。
 
 维护建议：
 - 所有 BrowserWindow 生命周期逻辑集中于此，避免分散到其它模块。
+- 注意：在 UIAccess 模式 + GPU 硬件加速开启时，若对全屏透明无边框窗口进行销毁并重建，会导致 DWM 复合链路失效（动画帧冻结在初始帧）。因此必须对这类窗口（如抽取结果页）保持持久化实例，使用 hide() 与 show() 来控制隐显，并在复用时通过 IPC 让渲染进程重置内部状态，严禁使用 close() 销毁重建。
 */
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 const config = require('./config');
 
 // 窗口与拖拽状态
 const dragSessions = new Map();
 let floatingButtonWindow = null;
-let pickCountWindow = null;
-let isPickCountWindowReady = false;
 let isFloatingHiddenForPickCount = false;
 let pickResultWindow = null;
 let isPickResultWindowReady = false;
@@ -29,6 +28,8 @@ let activePickResultToken = 0;
 let floatingWindowWatchdog = null;
 let isDebugMode = false;
 let isQuitting = false;
+let floatingExpanded = false;
+let floatingExpandedSize = null;
 
 // 动画与抽取算法参数
 const FLOATING_WINDOW_FADE_MS = 400;
@@ -47,10 +48,6 @@ function getFloatingButtonWindow() {
   return floatingButtonWindow;
 }
 
-function getPickCountWindow() {
-  return pickCountWindow;
-}
-
 function getPickResultWindow() {
   return pickResultWindow;
 }
@@ -63,6 +60,88 @@ function refreshFloatingButtonWindow() {
   if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) {
     floatingButtonWindow.close();
   }
+}
+
+function getFloatingButtonWindowSize() {
+  const cfg = config.refreshConfig();
+  const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
+  
+  // 固定为完整展开时所需的最大窗口尺寸，防止窗口边界截断问题
+  const base = Math.max(40, sizePx);
+  const actionBtnSize = Math.round(Math.max(36, base * 0.7));
+  const ringThickness = actionBtnSize;
+  const placementRadius = Math.round(Math.max(55, base * 1.05));
+  const ringRadius = placementRadius + Math.round(ringThickness / 2);
+  const windowSize = Math.round(Math.max(340, ringRadius * 2 + 40));
+  
+  return { width: windowSize, height: windowSize };
+}
+
+function clampBoundsToWorkArea(bounds, workArea) {
+  if (!workArea) return bounds;
+  
+  const cfg = config.refreshConfig();
+  const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
+  
+  // 允许透明扩展区越过屏幕边界，从而确保视觉中心的核心按钮能贴近屏幕边缘
+  const paddingX = (bounds.width - sizePx) / 2;
+  const paddingY = (bounds.height - sizePx) / 2;
+  
+  const minX = workArea.x - paddingX;
+  const minY = workArea.y - paddingY;
+  const maxX = workArea.x + workArea.width - bounds.width + paddingX;
+  const maxY = workArea.y + workArea.height - bounds.height + paddingY;
+  
+  return {
+    ...bounds,
+    x: Math.max(minX, Math.min(bounds.x, maxX)),
+    y: Math.max(minY, Math.min(bounds.y, maxY))
+  };
+}
+
+function resizeFloatingButtonWindow({ width, height }) {
+  if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) {
+    return;
+  }
+
+  const current = floatingButtonWindow.getBounds();
+  const centerX = current.x + current.width / 2;
+  const centerY = current.y + current.height / 2;
+  const targetWidth = Math.max(72, Math.round(width));
+  const targetHeight = Math.max(72, Math.round(height));
+  const nextBounds = {
+    x: Math.round(centerX - targetWidth / 2),
+    y: Math.round(centerY - targetHeight / 2),
+    width: targetWidth,
+    height: targetHeight
+  };
+
+  const display = screen.getDisplayNearestPoint({ x: Math.round(centerX), y: Math.round(centerY) });
+  const clamped = clampBoundsToWorkArea(nextBounds, display && display.workArea ? display.workArea : null);
+  floatingButtonWindow.setBounds(clamped, true);
+}
+
+function setFloatingButtonExpanded(payload) {
+  const expanded = Boolean(payload && payload.expanded);
+  floatingExpanded = expanded;
+  if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) {
+    return;
+  }
+
+  if (expanded) {
+    const size = payload && payload.size ? payload.size : null;
+    const width = size ? Number(size.width) : NaN;
+    const height = size ? Number(size.height) : NaN;
+    if (Number.isFinite(width) && Number.isFinite(height)) {
+      floatingExpandedSize = { width, height };
+      resizeFloatingButtonWindow({ width, height });
+      return;
+    }
+  }
+
+  floatingExpandedSize = null;
+  const baseSize = getFloatingButtonWindowSize();
+  resizeFloatingButtonWindow(baseSize);
 }
 
 // 退出前保存悬浮按钮位置
@@ -161,10 +240,9 @@ function createFloatingButtonWindow() {
   }
 
   const cfg = config.refreshConfig();
-  const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
-
-  const winWidth = Math.max(72, sizePx + 20);
-  const winHeight = Math.max(72, sizePx + 20);
+  const baseSize = getFloatingButtonWindowSize();
+  const winWidth = baseSize.width;
+  const winHeight = baseSize.height;
 
   const hasSavedX = Number.isFinite(Number(cfg.floatingButton.position.x));
   const hasSavedY = Number.isFinite(Number(cfg.floatingButton.position.y));
@@ -198,6 +276,10 @@ function createFloatingButtonWindow() {
   const win = new BrowserWindow(windowOptions);
   floatingButtonWindow = win;
   // win.setIgnoreMouseEvents(true, { forward: true });
+
+  if (floatingExpanded && floatingExpandedSize) {
+    resizeFloatingButtonWindow(floatingExpandedSize);
+  }
 
   if (cfg.floatingButton.alwaysOnTop) {
     win.setAlwaysOnTop(true, 'screen-saver');
@@ -287,106 +369,6 @@ function stopFloatingWindowWatchdog() {
   }
 }
 
-// 关闭人数选择窗口
-function closePickCountWindow(options = {}) {
-  const keepFloatingHidden = Boolean(options.keepFloatingHidden);
-  if (!pickCountWindow || pickCountWindow.isDestroyed()) {
-    if (!keepFloatingHidden) {
-      isFloatingHiddenForPickCount = false;
-      fadeInFloatingButtonWindow();
-    }
-    return;
-  }
-
-  if (pickCountWindow.isVisible()) {
-    pickCountWindow.hide();
-  }
-
-  if (keepFloatingHidden) {
-    isFloatingHiddenForPickCount = true;
-    return;
-  }
-
-  isFloatingHiddenForPickCount = false;
-  fadeInFloatingButtonWindow();
-}
-
-// 预创建人数选择窗口实例
-function createPickCountWindowInstance() {
-  if (pickCountWindow && !pickCountWindow.isDestroyed()) {
-    return;
-  }
-
-  const win = new BrowserWindow({
-    show: false,
-    frame: false,
-    transparent: true,
-    fullscreen: true,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    movable: false,
-    alwaysOnTop: true,
-    skipTaskbar: !isDebugMode,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      autoplayPolicy: 'no-user-gesture-required'
-    }
-  });
-
-  pickCountWindow = win;
-  isPickCountWindowReady = false;
-  win.setMenuBarVisibility(false);
-  if (process.env.VITE_DEV_SERVER_URL) {
-    win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pick-count`);
-  } else {
-    win.loadURL(`file://${path.join(__dirname, '../dist/index.html')}#/pick-count`);
-  }
-  if (isDebugMode) {
-    win.webContents.openDevTools({ mode: 'detach' });
-  }
-
-  win.once('ready-to-show', () => {
-    isPickCountWindowReady = true;
-  });
-
-  win.on('closed', () => {
-    pickCountWindow = null;
-    isPickCountWindowReady = false;
-    if (!isQuitting) {
-      fadeInFloatingButtonWindow();
-    }
-  });
-}
-
-// 打开人数选择窗口
-function createPickCountWindow() {
-  createPickCountWindowInstance();
-
-  if (!pickCountWindow || pickCountWindow.isDestroyed()) {
-    return;
-  }
-
-  const openPickCountWindow = () => {
-    if (!pickCountWindow || pickCountWindow.isDestroyed()) {
-      return;
-    }
-    pickCountWindow.webContents.send('pick-count:open');
-    pickCountWindow.show();
-    pickCountWindow.focus();
-  };
-
-  if (isPickCountWindowReady) {
-    openPickCountWindow();
-  } else {
-    pickCountWindow.once('ready-to-show', openPickCountWindow);
-  }
-
-  isFloatingHiddenForPickCount = true;
-  fadeOutFloatingButtonWindow();
-}
 
 // 关闭抽取结果窗口
 function closePickResultWindow() {
@@ -395,9 +377,6 @@ function closePickResultWindow() {
     activePickResultToken = 0;
     isFloatingHiddenForPickCount = false;
     fadeInFloatingButtonWindow();
-    if (pickCountWindow && !pickCountWindow.isDestroyed()) {
-      pickCountWindow.webContents.send('pick-count:stop-bgm');
-    }
     return;
   }
 
@@ -409,10 +388,6 @@ function closePickResultWindow() {
   activePickResultToken = 0;
   isFloatingHiddenForPickCount = false;
   fadeInFloatingButtonWindow();
-  
-  if (pickCountWindow && !pickCountWindow.isDestroyed()) {
-    pickCountWindow.webContents.send('pick-count:stop-bgm');
-  }
 }
 
 // 预创建抽取结果窗口实例
@@ -497,12 +472,6 @@ function openPickResultWindow(results) {
 
   isFloatingHiddenForPickCount = true;
   fadeOutFloatingButtonWindow();
-}
-
-function sendPickCountStopBgm() {
-  if (pickCountWindow && !pickCountWindow.isDestroyed()) {
-    pickCountWindow.webContents.send('pick-count:stop-bgm');
-  }
 }
 
 function getDragSession(eventId) {
@@ -636,16 +605,12 @@ function pickStudentsByWeight(count) {
 }
 
 module.exports = {
-  closePickCountWindow,
   closePickResultWindow,
   createFloatingButtonWindow,
-  createPickCountWindow,
-  createPickCountWindowInstance,
   createPickResultWindowInstance,
   fadeInFloatingButtonWindow,
   getCurrentPickResults,
   getFloatingButtonWindow,
-  getPickCountWindow,
   getPickResultWindow,
   handleDragEnd,
   handleDragMove,
@@ -654,7 +619,7 @@ module.exports = {
   persistFloatingButtonPosition,
   pickStudentsByWeight,
   refreshFloatingButtonWindow,
-  sendPickCountStopBgm,
+  setFloatingButtonExpanded,
   setDebugMode,
   setIgnoreMouseEvents,
   setQuitting,

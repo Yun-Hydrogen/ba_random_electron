@@ -16,6 +16,7 @@
 ## Props
 - `sizePx`：按钮像素尺寸。
 - `transparencyPercent`：透明度百分比。
+- `dragDisabled`：是否禁用拖拽。
 
 ## 关键状态（Refs / Computed）
 - `styleOpacity`：透明度计算（1 - percent/100）。
@@ -84,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const props = defineProps({
   sizePx: {
@@ -94,6 +95,10 @@ const props = defineProps({
   transparencyPercent: {
     type: Number,
     required: true
+  },
+  dragDisabled: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -192,13 +197,28 @@ function cancelScheduledMove() {
   }
 }
 
-function updateIgnoreMouse() {}
+function updateIgnoreMouse() {
+  if (!window.floatingButtonApi) return
+  // 当 picker 打开（dragDisabled）时，始终不穿透鼠标
+  if (props.dragDisabled) {
+    window.floatingButtonApi.setIgnoreMouseEvents(false)
+    return
+  }
+  // 正常模式：hover 或按下时捕获鼠标，否则穿透
+  const shouldIgnore = !isHovering.value && !pointerDown.value
+  window.floatingButtonApi.setIgnoreMouseEvents(shouldIgnore)
+}
 
 function clearHoverState() {
   if (!isHovering.value) return
   isHovering.value = false
   updateIgnoreMouse()
 }
+
+// picker 打开/关闭导致 dragDisabled 变化时，重新评估鼠标穿透状态
+watch(() => props.dragDisabled, () => {
+  updateIgnoreMouse()
+})
 
 function isPointerInside(event) {
   if (!event || !event.currentTarget) return false
@@ -237,6 +257,7 @@ function handlePointerDown(event) {
 function handlePointerMove(event) {
   if (activePointerId.value !== event.pointerId) return
   if (!pointerDown.value || !window.floatingButtonApi) return
+  if (props.dragDisabled) return
 
   lastPointerType.value = event.pointerType || lastPointerType.value
 
@@ -283,6 +304,9 @@ function handlePointerUp(event) {
   isDragging.value = false
   if (event.pointerType === 'mouse' && !isPointerInside(event)) {
     clearHoverState()
+  } else if (event.pointerType === 'mouse' && isPointerInside(event)) {
+    // 点击后鼠标仍在按钮上：恢复 hover，确保后续鼠标穿透状态正确
+    isHovering.value = true
   }
   updateIgnoreMouse()
   if (event.currentTarget && event.currentTarget.releasePointerCapture) {
@@ -339,33 +363,24 @@ onBeforeUnmount(() => {
 
 .floating-button {
   position: relative;
-  border: 3px dashed #66ccff;
+  border: 2px solid #66ccff;
   outline: none;
   -webkit-tap-highlight-color: transparent;
-  border-radius: 16px;
+  border-radius: 50%;
   cursor: pointer;
   touch-action: none;
   padding: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background:  #bfeafff0;
-  transition: transform 300ms ease, box-shadow 300ms ease, background 300ms ease;
+  background: #FFF;
+  transition: transform 260ms ease, box-shadow 260ms ease, background 260ms ease, border-color 260ms ease;
 }
 
 .floating-button.is-hovering:not(.is-dragging) {
-  background: #66ccff;
-}
-
-.floating-button:active {
-  transform: translateY(1px) scale(0.985);
-}
-
-.floating-button.is-dragging,
-.floating-button.is-dragging:hover,
-.floating-button.is-dragging:active {
-  transform: none;
-  transition: none;
+  background: #FFF;
+  border-color: rgba(40, 130, 230, 0.9);
+  box-shadow: 0 14px 28px rgba(8, 32, 72, 0.28), inset 0 1px 3px rgba(255, 255, 255, 0.85);
 }
 
 .floating-button img {

@@ -12,21 +12,16 @@
 ### `window.floatingButtonApi`
 用于悬浮按钮窗口。
 - `getConfig()`：`ipcRenderer.invoke('floating-button:get-config')`
-- `onClick()`：`ipcRenderer.send('floating-button:clicked')`
 - `startDrag()`：`ipcRenderer.send('floating-button:drag-start')`
 - `moveDrag(dx, dy)`：`ipcRenderer.send('floating-button:drag-move', { dx, dy })`
 - `endDrag()`：`ipcRenderer.send('floating-button:drag-end')`
 - `setIgnoreMouseEvents(ignore)`：`ipcRenderer.send('floating-button:set-ignore-mouse', ignore)`
+- `setExpanded(expanded, size)`：`ipcRenderer.send('floating-button:set-expanded', { expanded, size })`
 
-### `window.pickCountApi`
-用于人数选择窗口。
-- `getConfig()`：`ipcRenderer.invoke('pick-count:get-config')`
-- `cancel()`：`ipcRenderer.send('pick-count:cancel')`
-- `confirm(count, playMusic)`：`ipcRenderer.send('pick-count:confirm', { count, playMusic })`
-- `onOpen(callback)`：监听 `pick-count:open` 事件
-  - 返回一个取消监听函数。
-- `onStopBgm(callback)`：监听 `pick-count:stop-bgm` 事件
-  - 返回一个取消监听函数。
+### `window.floatingPickerApi`
+用于悬浮按钮的环绕人数选择。
+- `getConfig()`：`ipcRenderer.invoke('floating-picker:get-config')`
+- `confirm(count)`：`ipcRenderer.send('floating-picker:confirm', { count })`
 
 ### `window.pickResultApi`
 用于抽取结果窗口。
@@ -51,7 +46,7 @@
 - 监听函数必须成对移除，避免窗口复用时产生重复回调。
 
 ## IPC 命名规则
-- 统一使用 `模块名:动作` 形式，例如：`pick-count:confirm`、`pick-result:open`。
+- 统一使用 `模块名:动作` 形式，例如：`floating-picker:confirm`、`pick-result:open`。
 - `get/读取` 用 `ipcRenderer.invoke` + `ipcMain.handle`（有返回值）。
 - `通知/事件` 用 `ipcRenderer.send` + `ipcMain.on`（无返回值）。
 - 从主进程主动推送事件到渲染进程时，使用同样的 `模块名:事件` 约定。
@@ -61,32 +56,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 // 悬浮按钮窗口桥接 API
 contextBridge.exposeInMainWorld('floatingButtonApi', {
   getConfig: () => ipcRenderer.invoke('floating-button:get-config'),
-  onClick: () => ipcRenderer.send('floating-button:clicked'),
   startDrag: () => ipcRenderer.send('floating-button:drag-start'),
   moveDrag: (dx, dy) => ipcRenderer.send('floating-button:drag-move', { dx, dy }),
   endDrag: () => ipcRenderer.send('floating-button:drag-end'),
-  setIgnoreMouseEvents: (ignore) => ipcRenderer.send('floating-button:set-ignore-mouse', ignore)
+  setIgnoreMouseEvents: (ignore) => ipcRenderer.send('floating-button:set-ignore-mouse', ignore),
+  setExpanded: (expanded, size) => ipcRenderer.send('floating-button:set-expanded', { expanded, size })
 });
 
-// 人数选择窗口桥接 API
-contextBridge.exposeInMainWorld('pickCountApi', {
-  getConfig: () => ipcRenderer.invoke('pick-count:get-config'),
-  cancel: () => ipcRenderer.send('pick-count:cancel'),
-  confirm: (count, playMusic) => ipcRenderer.send('pick-count:confirm', { count, playMusic }),
-  onOpen: (callback) => {
-    const listener = () => callback();
-    ipcRenderer.on('pick-count:open', listener);
-    return () => {
-      ipcRenderer.removeListener('pick-count:open', listener);
-    };
-  },
-  onStopBgm: (callback) => {
-    const listener = () => callback();
-    ipcRenderer.on('pick-count:stop-bgm', listener);
-    return () => {
-      ipcRenderer.removeListener('pick-count:stop-bgm', listener);
-    };
-  }
+// 人数环绕选择桥接 API
+contextBridge.exposeInMainWorld('floatingPickerApi', {
+  getConfig: () => ipcRenderer.invoke('floating-picker:get-config'),
+  confirm: (count) => ipcRenderer.send('floating-picker:confirm', { count })
 });
 
 // 抽取结果窗口桥接 API
