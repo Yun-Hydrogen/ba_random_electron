@@ -53,6 +53,11 @@
 ## 动画与时序
 - 信封飞入：`.letter-card` 使用 `letter-fly-in` 动画，延迟 `index * 0.12s`。
 - 姓名展开：`.name-card.is-reveal` 使用 `name-reveal` 动画，延迟 `index * 0.12s + 0.1s`。
+- 关闭淡出：`.result-stage.is-closing` 使用 `result-fade-out` 动画（220ms），同时 `pointer-events: none` 防止重复点击。
+
+## 资源路径解析
+- `resolveAssetUrl(relativePath)`：兼容 `file://` 与 `http://` 协议的资产路径解析，用于加载音效文件。
+- 音效文件：`/sound/gacha_loading.wav`。
 
 ## 维护注意事项
 - 任何新增交互需调用 `closeResult()`，确保状态机与计时器正确清理。

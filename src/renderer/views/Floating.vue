@@ -4,30 +4,41 @@
 本文总结 [src/renderer/views/Floating.vue](src/renderer/views/Floating.vue) 的结构与方法，便于后续 AI 维护。
 
 ## 模块概览
-- 作用：悬浮按钮窗口入口，包含按钮与人数环绕选择 UI。
-- 技术：Vue 3 `<script setup>`，通过 `floatingButtonApi` 读取配置。通过 `floatingPickerApi` 执行抽取。
+- 作用：悬浮按钮窗口入口，包含按钮、胶囊形人数控件条、确认/取消按钮。
+- 技术：Vue 3 `<script setup>`，通过 `floatingButtonApi` / `floatingPickerApi` 与主进程通信。
 
 ## 页面结构（Template）
-- `FloatingButton`：可拖拽圆形按钮。
-- `picker-layer`：点击按钮后出现的环绕人数选择 UI。
-  - 上方弧形环。
-  - 中部人数显示。
-  - 左侧 `- / MIN`，右侧 `+ / MAX`。
-  - 左侧 `X` 关闭，右侧 `✓` 确认。
+- `FloatingButton`：可拖拽圆形悬浮按钮（居中）。
+- `picker-capsule`：悬浮按钮正上方的胶囊形水平控件条。
+  - 从左到右：`MIN` | `−` | 人数 | `+` | `MAX`，竖线分隔。
+  - 样式：`border-radius: 999px` 胶囊形，蓝白渐变 + 发光阴影。
+- `picker-actions`：X 关闭（左侧）与 ✓ 确认（右侧）圆形按钮。
+  - 定位：±90° 旋转，与悬浮按钮圆心水平持平。
+  - 尺寸：`calc(var(--action-size) * 1.05)`。
 
 ## 关键状态
-- `isPickerOpen`：是否展示环绕选择 UI。
+- `isPickerOpen`：是否展示选择 UI。
 - `count`：当前人数（1-10）。
-- `sizePx`：按钮像素尺寸（基于 50px 乘以百分比）。
+- `sizePx`：按钮像素尺寸。
+- `countPulse`：人数变更时的脉冲动画触发。
+
+## 核心设计：鼠标穿透与窗口扩展
+- **`setPickerOpen(open)`**：纯状态设置。
+- **`watch(isPickerOpen)`**：Vue prop 传播后执行窗口级副作用：
+  - 打开 → `setIgnoreMouseEvents(false)` + `setExpanded(true, size)`。
+  - 关闭 → `setExpanded(false)`，穿透由 FloatingButton 自行管理。
+
+## 动画
+- 入场：`0.22s cubic-bezier(0.2, 0.8, 0.2, 1)` 飞入（`scale(0.85) + translateY(12px) → 正常`）。
+- 退场：`0.18s cubic-bezier(0.5, 0, 0.1, 1)` 淡出。
+- 人数脉冲：`txt-pulse 0.25s` 缩放弹跳。
 
 ## IPC / API 依赖
 来自 `window.floatingButtonApi`：
-- `getConfig()`：读取悬浮按钮配置。
-- `setExpanded(expanded, size)`：切换悬浮窗扩展尺寸。
+- `getConfig()` / `setExpanded(expanded, size)` / `setIgnoreMouseEvents(ignore)`
 
 来自 `window.floatingPickerApi`：
-- `getConfig()`：读取人数选择默认值。
-- `confirm(count)`：触发抽取流程。
+- `getConfig()` / `confirm(count)`
 -->
 <template>
   <div class="floating-stage" :class="{ 'is-picker-open': isPickerOpen }" :style="pickerStyle">
@@ -40,37 +51,23 @@
     />
     <transition name="picker-pop">
       <div v-if="isPickerOpen" class="picker-layer" aria-live="polite">
-        <svg class="picker-svg" :width="pickerMetrics.windowSize" :height="pickerMetrics.windowSize" :viewBox="`0 0 ${pickerMetrics.windowSize} ${pickerMetrics.windowSize}`">
-          <circle
-            class="svg-track-border"
-            :cx="pickerMetrics.arcCenter" :cy="pickerMetrics.arcCenter" :r="pickerMetrics.placementRadius"
-            fill="none" stroke="#66ccff" :stroke-width="pickerMetrics.ringThickness"
-            stroke-linecap="round"
-            :stroke-dasharray="`${pickerMetrics.arcLength} ${pickerMetrics.circum}`"
-            :transform="`rotate(${-90 - pickerMetrics.arcSpan / 2} ${pickerMetrics.arcCenter} ${pickerMetrics.arcCenter})`"
-          />
-          <circle
-            class="svg-track-bg"
-            :cx="pickerMetrics.arcCenter" :cy="pickerMetrics.arcCenter" :r="pickerMetrics.placementRadius"
-            fill="none" stroke="#ffffff" :stroke-width="pickerMetrics.ringThickness - 4"
-            stroke-linecap="round"
-            :stroke-dasharray="`${pickerMetrics.arcLength} ${pickerMetrics.circum}`"
-            :transform="`rotate(${-90 - pickerMetrics.arcSpan / 2} ${pickerMetrics.arcCenter} ${pickerMetrics.arcCenter})`"
-          />
-        </svg>
+
+        <!-- 胶囊形控件条：悬浮按钮正上方 -->
+        <div class="picker-capsule">
+          <button class="capsule-btn" :disabled="!canDecrease" @click="setMinCount" aria-label="最小">MIN</button>
+          <span class="capsule-divider"></span>
+          <button class="capsule-btn" :disabled="!canDecrease" @click="decreaseCount" aria-label="减少">−</button>
+          <span class="capsule-divider"></span>
+          <div class="capsule-count" :class="{ 'is-pulse': countPulse }">
+            <span class="capsule-count-value">{{ count }}</span>
+          </div>
+          <span class="capsule-divider"></span>
+          <button class="capsule-btn" :disabled="!canIncrease" @click="increaseCount" aria-label="增加">+</button>
+          <span class="capsule-divider"></span>
+          <button class="capsule-btn" :disabled="!canIncrease" @click="setMaxCount" aria-label="最大">MAX</button>
+        </div>
 
         <div class="picker-actions">
-          <div class="pos-node node-count" :class="{ 'is-pulse': countPulse }">
-            <span class="picker-count-value">{{ count }}</span>
-            <span class="picker-count-label"></span>
-          </div>
-          
-          <button class="pos-node node-minus" :disabled="!canDecrease" @click="decreaseCount" aria-label="减少">-</button>
-          <button class="pos-node node-min" :disabled="!canDecrease" @click="setMinCount" aria-label="最小">MIN</button>
-          
-          <button class="pos-node node-plus" :disabled="!canIncrease" @click="increaseCount" aria-label="增加">+</button>
-          <button class="pos-node node-max" :disabled="!canIncrease" @click="setMaxCount" aria-label="最大">MAX</button>
-
           <button class="pos-node node-close" @click="handleClosePicker" aria-label="关闭">
             <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
@@ -277,23 +274,96 @@ onMounted(() => {
 }
 
 .picker-svg {
+  display: none;
+}
+
+/* ===== 胶囊形控件条：悬浮按钮正上方 ===== */
+
+.picker-capsule {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
+  transform: translate(-50%, calc(-50% - var(--size-px) / 2 - var(--ring-thickness) / 2 - 6px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--ring-thickness);
+  padding: 0 2px;
+  border-radius: 999px;
+  background: #FFF;
+  border: 2px solid #66ccff;
+  pointer-events: auto;
+  z-index: 7;
+  white-space: nowrap;
 }
 
-.svg-glow {
-  animation: arc-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.capsule-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(var(--ring-thickness) - 6px);
+  min-width: calc(var(--ring-thickness) * 0.7);
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: #4477aa;
+  font-weight: 600;
+  font-size: clamp(10px, calc(var(--ring-thickness) * 0.28), 13px);
+  font-family: "Bahnschrift", "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  letter-spacing: 0.3px;
+  border-radius: 999px;
 }
 
-@keyframes arc-pulse {
-  0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 6px rgba(60, 255, 220, 0.4)); }
-  50% { opacity: 1; filter: drop-shadow(0 0 12px rgba(98, 204, 255, 0.8)); }
+.capsule-btn:not(:disabled):hover {
+  color: #1a6090;
+  background: rgba(102, 180, 255, 0.12);
 }
 
-/* 节点容器属性 */
+.capsule-btn:not(:disabled):active {
+  color: #0d4a78;
+  background: rgba(102, 180, 255, 0.2);
+}
+
+.capsule-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.capsule-divider {
+  display: inline-block;
+  width: 1px;
+  height: calc(var(--ring-thickness) * 0.45);
+  background: rgba(102, 170, 220, 0.3);
+  flex-shrink: 0;
+}
+
+.capsule-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--ring-thickness) * 0.9);
+  padding: 0 4px;
+  cursor: default;
+  color: #1a3a5c;
+  font-size: clamp(16px, calc(var(--ring-thickness) * 0.42), 26px);
+  font-weight: 700;
+  font-family: "Bahnschrift", "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+}
+
+.capsule-count-value {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
+  line-height: 1;
+}
+
+.capsule-count.is-pulse .capsule-count-value {
+  animation: txt-pulse 0.25s ease-out;
+}
+
+/* ===== X / ✓ 操作按钮容器 ===== */
 
 .picker-actions {
   position: absolute;
@@ -309,163 +379,64 @@ onMounted(() => {
   top: 50%;
   left: 50%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   pointer-events: auto;
-  border: 1.5px solid rgba(120, 200, 255, 0.5);
-  box-shadow: 0 4px 12px rgba(6, 22, 48, 0.4);
-  background:#fff;
-  color: #e9f7ff;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
-  backdrop-filter: blur(8px);
   outline: none;
 }
 
-.pos-node:not(:disabled):hover {
-  border-color: rgba(60, 255, 220, 0.8);
-  box-shadow: 0 6px 16px rgba(60, 255, 220, 0.4), inset 0 0 8px rgba(60, 255, 220, 0.2);
-}
-
-.pos-node:not(:disabled):active {
-  filter: brightness(0.85);
-}
-
-.pos-node:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  filter: grayscale(1);
-}
-
-.node-count {
-  width: var(--count-size);
-  height: var(--count-size);
-  transform: translate(-50%, -50%) translateY(calc(-1 * var(--placement-radius)));
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  cursor: default;
-}
-.node-count:hover {
-  transform: translate(-50%, -50%) translateY(calc(-1 * var(--placement-radius))) scale(1.05) !important;
-}
-
-.picker-count-value {
-  font-size: clamp(20px, calc(var(--count-size) * 0.5), 32px);
-  line-height: 1.1;
-  font-weight: bold;
-  color: #333333;
-  text-shadow: none;
-}
-.picker-count-label {
-  font-size: clamp(8px, calc(var(--count-size) * 0.2), 11px);
-  color: rgba(50, 50, 50, 0.75);
-  letter-spacing: 1px;
-}
-.node-count.is-pulse .picker-count-value {
-  animation: txt-pulse 0.25s ease-out;
-}
-@keyframes txt-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.3); }
-  100% { transform: scale(1); }
-}
-
-.node-minus {
-  width: var(--btn-l-size); height: var(--btn-l-size); font-size: 20px;
-  transform: translate(-50%, -50%) rotate(-20deg) translateY(calc(-1 * var(--placement-radius))) rotate(20deg);
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #333333;
-  font-weight: bold;
-}
-.node-minus:hover { transform: translate(-50%, -50%) rotate(-20deg) translateY(calc(-1 * var(--placement-radius))) rotate(20deg) scale(1.1) !important; }
-
-.node-plus {
-  width: var(--btn-l-size); height: var(--btn-l-size); font-size: 20px;
-  transform: translate(-50%, -50%) rotate(20deg) translateY(calc(-1 * var(--placement-radius))) rotate(-20deg);
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #333333;
-  font-weight: bold;
-}
-.node-plus:hover { transform: translate(-50%, -50%) rotate(20deg) translateY(calc(-1 * var(--placement-radius))) rotate(-20deg) scale(1.1) !important; }
-
-.node-min {
-  width: var(--btn-s-size); height: var(--btn-s-size); font-size: 13px;
-  transform: translate(-50%, -50%) rotate(-40deg) translateY(calc(-1 * var(--placement-radius))) rotate(40deg);
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #666666;
-  font-weight: bold;
-}
-.node-min:hover { transform: translate(-50%, -50%) rotate(-40deg) translateY(calc(-1 * var(--placement-radius))) rotate(40deg) scale(1.1) !important; }
-
-.node-max {
-  width: var(--btn-s-size); height: var(--btn-s-size); font-size: 13px;
-  transform: translate(-50%, -50%) rotate(40deg) translateY(calc(-1 * var(--placement-radius))) rotate(-40deg);
-  background-color: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #666666;
-  font-weight: bold;
-}
-.node-max:hover { transform: translate(-50%, -50%) rotate(40deg) translateY(calc(-1 * var(--placement-radius))) rotate(-40deg) scale(1.1) !important; }
-
 .node-close {
-  width: var(--action-size); height: var(--action-size);
-  transform: translate(-50%, -50%) rotate(-80deg) translateY(calc(-1 * var(--placement-radius))) rotate(80deg);
+  width: calc(var(--action-size) * 1.2); height: calc(var(--action-size) * 1.2);
+  transform: translate(-50%, -50%) rotate(-90deg) translateY(calc(-1 * var(--placement-radius))) rotate(90deg);
+  border-radius: 50%;
   border: 2px solid #ffb0b9;
-  background-color: #ff9494;
+  background: #ff9494;
+  box-shadow: 0 4px 12px rgba(255, 120, 140, 0.3);
   color: #ffffff;
 }
 .node-close:hover { 
-  transform: translate(-50%, -50%) rotate(-80deg) translateY(calc(-1 * var(--placement-radius))) rotate(80deg) scale(1.1) !important; 
+  transform: translate(-50%, -50%) rotate(-90deg) translateY(calc(-1 * var(--placement-radius))) rotate(90deg) scale(1.1) !important; 
   border-color: rgba(255, 90, 110, 1);
-  box-shadow: 0 4px 16px rgba(255, 90, 110, 0.4);
+  box-shadow: 0 4px 16px rgba(255, 90, 110, 0.5);
+  filter: none;
 }
 
 .node-confirm {
-  width: var(--action-size); height: var(--action-size);
-  transform: translate(-50%, -50%) rotate(80deg) translateY(calc(-1 * var(--placement-radius))) rotate(-80deg);
+  width: calc(var(--action-size) * 1.2); height: calc(var(--action-size) * 1.2);
+  transform: translate(-50%, -50%) rotate(90deg) translateY(calc(-1 * var(--placement-radius))) rotate(-90deg);
+  border-radius: 50%;
   border: 2px solid rgba(80, 255, 140, 0.6);
+  background: #66ccff;
+  box-shadow: 0 4px 12px rgba(102, 204, 255, 0.3);
   color: #ffffff;
-  background-color: #66ccff;
 }
 .node-confirm:hover { 
-  transform: translate(-50%, -50%) rotate(80deg) translateY(calc(-1 * var(--placement-radius))) rotate(-80deg) scale(1.1) !important; 
+  transform: translate(-50%, -50%) rotate(90deg) translateY(calc(-1 * var(--placement-radius))) rotate(-90deg) scale(1.1) !important; 
   border-color: #17e3f2;
-  box-shadow: 0 4px 16px rgba(80, 255, 140, 0.4);
+  box-shadow: 0 4px 16px rgba(80, 255, 140, 0.5);
+  filter: none;
 }
 
 .picker-pop-enter-active {
-  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .picker-pop-leave-active {
-  transition: all 0.3s cubic-bezier(0.5, 0, 0.1, 1);
+  transition: all 0.18s cubic-bezier(0.5, 0, 0.1, 1);
 }
 .picker-pop-enter-from,
 .picker-pop-leave-to {
   opacity: 0;
-  transform: scale(0.6) translateY(20px);
+  transform: scale(0.85) translateY(12px);
 }
 
-@keyframes count-pulse {
-  0% {
-    transform: translate(-50%, -50%) translateY(calc(-1 * var(--placement-radius))) scale(1);
-  }
-  50% {
-    transform: translate(-50%, -50%) translateY(calc(-1 * var(--placement-radius))) scale(1.08);
-  }
-  100% {
-    transform: translate(-50%, -50%) translateY(calc(-1 * var(--placement-radius))) scale(1);
-  }
+@keyframes txt-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+  100% { transform: scale(1); }
 }
 </style>
 

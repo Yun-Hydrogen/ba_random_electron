@@ -10,6 +10,7 @@
 
 ## 页面结构（Template）
 - 顶部标题：页面标题 + 提示文字。
+- EULA 协议弹窗：首次使用时通过 `teleport` 渲染全屏遮罩，需用户同意后方可使用。
 - Tabs：
   - `list` 花名册导入（文本输入 + CSV/TXT 文件导入）。
   - `students` 花名册管理（权重滑条、删除、重置权重、允许重复抽取开关）。
@@ -17,39 +18,51 @@
   - `pickCount` 抽取动画配置（BGM、抽取音效、音量、背景暗度、默认人数）。
   - `web` 系统服务（端口设置 + 更新检查卡片）。
     - 额外：管理员置顶增强开关、管理员权限申请按钮、开机计划任务配置。
+    - UIAccess 开关（需二次确认弹窗）。
 - 保存按钮：提交配置。
+- 右上角通知：`toast` 堆叠提示（最多 3 条），UIAccess 二次确认弹窗。
 - 右侧日志面板：
-  - 标题行：运行日志 + 调试模式徽章（可选）+ 版本号（总是显示）。
+  - 标题行：运行日志 + 调试模式徽章（可选）+ 版本号（总是显示）+ 管理员/UIAccess 状态徽章。
   - 日志列表：SSE 实时日志 + 本地记录。
 
 ## 关键状态（Refs）
-- `activeTab` / `transitionName`：控制标签页与切换动画。
-- `config`：配置对象（与后端 `/api/config` 同结构）。
+- `activeTab` / `transitionName`：控制标签页与切换动画（`slide-left` / `slide-right`）。
+- `config`：配置对象（与后端 `/api/config` 同结构），含 `agreedEula` 字段控制 EULA 弹窗。
 - `rawListText`：名单原始文本。
-- `logs`：日志数组（前端聚合 + SSE）。
+- `logs`：日志数组（前端聚合 + SSE），`logSeed` 自增 ID。
 - `updateState`：更新检查状态（按钮状态、提示文案、链接）。
-- `isDebugMode`：是否调试模式（来自 `/api/app-info`）。
-- `appVersion`：当前版本号（来自 `/api/app-info`）。
-- `toasts`：右上角通知队列（最多 3 条）。
+- `isDebugMode` / `isAdmin` / `isUiAccess`：运行状态（来自 `/api/app-info`）。
+- `appVersion` / `defaultExePath` / `uiAccessDllExists`：应用信息。
+- `configPath` / `configDir`：配置文件路径与目录。
+- `uiAccessPromptOpen` / `uiAccessEnablePending`：UIAccess 二次确认弹窗状态。
+- `uiAccessAutoFilled`：是否已自动检测到 uiaccess.dll 并提示。
+- `toasts`：右上角通知队列（最多 3 条），`toastSeed` 自增 ID，`toastTimers` 管理定时清除。
 
 ## 主要方法与职责
-- `switchTab(tab)`：切换标签页，设置左右滑动动画。
+- `switchTab(tab)`：切换标签页，根据索引方向设置左右滑动动画。
+- `agreeEula()`：同意 EULA 协议，设置 `agreedEula = true` 并自动保存配置。
 - `checkUpdate()`：
   - 调用 `/api/check-update` 获取更新状态。
   - 读取 `debug` 数组并写入日志。
   - 根据 `status` 更新 UI（`update` / `ok` / `easter` / `error`）。
+  - 详细的 axios 错误诊断（status/code/message/isAxiosError/url）。
 - `addLog(level, text, timeOverride)`：写入本地日志（顶部插入 + 最多 200 条）。
 - `startLogStream()`：使用 `EventSource` 连接 `/api/logs` 获取后端日志流。
-- `fetchConfig()`：GET `/api/config` 初始化配置与名单文本。
+- `startConfigEventStream()`：使用 `EventSource` 连接 `/api/config-events`，配置变化时自动刷新。
+- `fetchConfig()`：GET `/api/config` 初始化配置与名单文本，调用 `applyDefaultAutoStartPath()`。
+- `fetchAppInfo()`：GET `/api/app-info` 获取运行状态、版本号、路径等信息。
+- `applyDefaultAutoStartPath()`：自动补全开机启动路径，检测 uiaccess.dll 存在时弹出提示。
 - `saveConfig()`：
   - `syncTextToList()` 生成学生名单。
-  - 组装 payload 并 POST `/api/config` 保存。
-- `requestAdminElevation()`：请求管理员权限并重启。
-- `createAdminStartupTask()`：创建/更新管理员权限开机计划任务。
-- `fetchAppInfo()`：GET `/api/app-info` 获取 `isDebugMode` 与版本号。
-- `showToast(message, type, duration)`：统一消息提示（替代 `window.alert`），右上角堆叠展示并带倒计时条。
+  - 组装 payload（含 `agreedEula`）并 POST `/api/config` 保存。
+- `requestAdminElevation()`：POST `/api/admin/elevate` 请求管理员权限并重启。
+- `requestAppRestart()`：POST `/api/restart` 触发应用重启。
+- `onUiAccessToggle()` / `confirmUiAccessEnable()` / `cancelUiAccessEnable()`：UIAccess 开关的二次确认流程（检测 dll 存在 → 保存配置 → 管理员提升或重启）。
+- `createAdminStartupTask()`：POST `/api/task/create-admin-startup` 创建/更新管理员权限开机计划任务。
+- `openConfigFile()` / `openConfigDir()`：POST `/api/config/open-file` / `open-dir` 打开配置文件或目录。
+- `showToast(message, type, duration)`：统一消息提示（替代 `window.alert`），右上角堆叠展示并带倒计时条，超量自动清除旧通知。
 - 名单处理：
-  - `syncTextToList()`：文本解析为去重名单 + 权重。
+  - `syncTextToList()`：文本解析为去重名单 + 权重（逗号/换行分隔）。
   - `syncListToText()`：名单回写成文本。
   - `handleFileUpload()`：读取 CSV/TXT -> 文本 -> 名单。
   - `removeStudent(index)` / `resetWeights()`：名单操作。
@@ -57,12 +70,16 @@
 
 ## 后端接口依赖
 - `GET /api/config`：读取配置。
-- `POST /api/config`：保存配置。
+- `POST /api/config`：保存配置（含 `agreedEula` 字段）。
 - `GET /api/logs`：SSE 日志流。
+- `GET /api/config-events`：SSE 配置变更事件流（保存配置时自动刷新页面）。
 - `GET /api/check-update`：更新检查。
-- `GET /api/app-info`：版本号 + 调试模式。
+- `GET /api/app-info`：版本号 + 调试模式 + 管理员状态 + UIAccess 状态 + 路径信息。
+- `POST /api/restart`：触发应用重启。
 - `POST /api/admin/elevate`：请求管理员权限并重启。
 - `POST /api/task/create-admin-startup`：创建/更新管理员权限开机任务。
+- `POST /api/config/open-file`：打开配置文件。
+- `POST /api/config/open-dir`：打开配置目录。
 
 ## 更新检查返回约定
 `/api/check-update` 返回结构（简化）：
@@ -71,6 +88,10 @@
 - `detail`: 详情文案
 - `commitUrl` / `releaseUrl`: 链接
 - `debug`: 诊断数组（写入日志）
+
+## 生命周期
+- `onMounted()`：调用 `fetchAppInfo()` → `fetchConfig()` → `startLogStream()` → `startConfigEventStream()`。
+- `onUnmounted()`：关闭 `logSource` 和 `configEventSource` 两个 SSE 连接，清除所有 toast 定时器。
 
 ## 样式关键点
 - 布局：`.layout` 为 `grid`，`2fr : 1fr` 固定右侧 1/3。
@@ -99,9 +120,13 @@
 
 ## 维护注意事项
 - 如果新增配置项，必须同时修改 `config` 默认值、`fetchConfig()` 读取、`saveConfig()` payload。
+- EULA 协议通过 `config.agreedEula` 字段控制，`agreeEula()` 保存后不再弹出。
+- UIAccess 启用需通过二次确认弹窗（`uiAccessPromptOpen`），检测 dll 存在 → 保存配置 → 触发管理员提升/重启。
 - 更新检查失败时建议保留 `debug` 输出，便于定位代理/网络问题。
 - Tab 名称与 `tabs` 数组需一致，否则切换动画会错位。
 - WebConfig 内不要使用 `window.alert`/`window.confirm`，统一改用 `showToast()` 与自定义弹窗。
+- SSE 连接（日志流 + 配置事件流）在组件卸载时必须关闭，避免内存泄漏。
+- `toastTimers` Map 需在组件卸载时遍历清除。
 -->
 <template>
   <main class="page">

@@ -16,7 +16,7 @@
 ## Props
 - `sizePx`：按钮像素尺寸。
 - `transparencyPercent`：透明度百分比。
-- `dragDisabled`：是否禁用拖拽。
+- `dragDisabled`：是否禁用拖拽（picker 打开时为 true，同时强制窗口捕获鼠标）。
 
 ## 关键状态（Refs / Computed）
 - `styleOpacity`：透明度计算（1 - percent/100）。
@@ -34,16 +34,20 @@
   - `playClickSound()`：通过 `AudioContext` 播放点击音效。
 - 拖拽与指针：
   - `getGlobalPoint(event)`：统一获取屏幕坐标，兼容触控。
-  - `scheduleMove()` / `flushMove()` / `cancelScheduledMove()`：合并拖拽更新频率。
-  - **状态重置**：触发点击(`emit('click')`)时强制重置 `isHovering.value = false`，避免窗口隐藏恢复由于判定中断导致的 Hover 残留。
-  - `updateIgnoreMouse()`：根据 hover / press 状态切换窗口鼠标穿透。
-  - `handlePointerEnter/Leave()`：更新 hover 并切换穿透。
-  - `handlePointerDown()`：初始化拖拽状态并捕获指针。
-  - `handlePointerMove()`：超过阈值时开始拖拽并更新偏移。
+  - `scheduleMove()` / `flushMove()` / `cancelScheduledMove()`：合并拖拽更新频率（`requestAnimationFrame` 节流）。
+  - `updateIgnoreMouse()`：核心鼠标穿透控制。
+    - `dragDisabled` 为 true（picker 打开）→ 始终 `setIgnoreMouseEvents(false)`，确保环绕控件可点击。
+    - 正常模式 → hover 或 press 时捕获（false），否则穿透（true）。
+  - `handlePointerEnter/Leave()`：更新 hover 并触发 `updateIgnoreMouse()`。
+  - `handlePointerDown()`：初始化拖拽状态、捕获指针、调用 `updateIgnoreMouse()`。
+  - `handlePointerMove()`：超过 `DRAG_THRESHOLD_PX` 阈值时开始拖拽并累积偏移。
   - `handlePointerUp()`：
-    - 若拖拽：提交移动并结束拖拽。
-    - 若未拖拽：播放音效并触发 `emit('click')`。
+    - 若拖拽：提交移动（`moveDrag` + `endDrag`）。
+    - 若未拖拽：播放音效，强制清 `isHovering` 避免残留高亮，`emit('click')`。
+    - 统一收尾：`pointerDown/activePointerId/isDragging` 重置，若鼠标仍在按钮内则**恢复 `isHovering = true`**（确保后续鼠标穿透状态正确），最后调用 `updateIgnoreMouse()`。
   - `handlePointerCancel()`：拖拽中断时清理状态。
+- 响应式监听：
+  - `watch(dragDisabled)`：picker 打开/关闭导致 prop 变化时，主动调用 `updateIgnoreMouse()` 重新评估窗口鼠标穿透。
 
 ## IPC / API 依赖
 来自 `window.floatingButtonApi`：
@@ -61,7 +65,10 @@
 
 ## 维护注意事项
 - 拖拽通过 `requestAnimationFrame` 节流，避免高频 IPC。
-- `updateIgnoreMouse()` 依赖主进程 `setIgnoreMouseEvents`，修改逻辑需同步主进程行为。
+- `updateIgnoreMouse()` 是鼠标穿透的**唯一入口**，修改逻辑需同步主进程 `setIgnoreMouseEvents` 行为。
+- `dragDisabled` prop 影响 `updateIgnoreMouse()` 的判断分支，picker 打开时强制捕获鼠标。
+- `handlePointerUp` 中非拖拽分支强制清 `isHovering` 后，若鼠标仍在按钮内必须恢复，否则窗口会错误进入穿透模式。
+- `watch(dragDisabled)` 解决 Vue prop 传播与同步 `updateIgnoreMouse()` 之间的时序竞争：picker 打开/关闭时确保以正确的 prop 值重评估。
 - `AudioContext` 在用户手势下恢复，避免播放被阻止。
 -->
 <template>
