@@ -11,9 +11,19 @@
 维护建议：
 - 所有 BrowserWindow 生命周期逻辑集中于此，避免分散到其它模块。
 */
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 const config = require('./config');
+
+// Windows 下使用最高置顶层，确保覆盖希沃白板等全屏置顶应用
+const IS_WINDOWS = process.platform === 'win32';
+
+// 获取屏幕边界（用于模拟全屏覆盖）
+function getScreenBounds() {
+  const cursorPoint = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursorPoint);
+  return display.bounds;
+}
 
 // 窗口与拖拽状态
 const dragSessions = new Map();
@@ -317,11 +327,15 @@ function createPickCountWindowInstance() {
     return;
   }
 
+  const bounds = getScreenBounds();
   const win = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     show: false,
     frame: false,
     transparent: true,
-    fullscreen: true,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -335,6 +349,11 @@ function createPickCountWindowInstance() {
       autoplayPolicy: 'no-user-gesture-required'
     }
   });
+
+  // Windows 下使用最高置顶层，确保覆盖希沃白板等全屏置顶应用
+  if (IS_WINDOWS) {
+    win.setAlwaysOnTop(true, 'screen-saver');
+  }
 
   pickCountWindow = win;
   isPickCountWindowReady = false;
@@ -372,6 +391,12 @@ function createPickCountWindow() {
   const openPickCountWindow = () => {
     if (!pickCountWindow || pickCountWindow.isDestroyed()) {
       return;
+    }
+    // Windows 下刷新屏幕边界并确保置顶层（屏幕可能变化）
+    if (IS_WINDOWS) {
+      const bounds = getScreenBounds();
+      pickCountWindow.setBounds(bounds);
+      pickCountWindow.setAlwaysOnTop(true, 'screen-saver');
     }
     pickCountWindow.webContents.send('pick-count:open');
     pickCountWindow.show();
@@ -421,11 +446,15 @@ function createPickResultWindowInstance() {
     return;
   }
 
+  const bounds = getScreenBounds();
   const win = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     show: false,
     frame: false,
     transparent: true,
-    fullscreen: true,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -439,6 +468,11 @@ function createPickResultWindowInstance() {
       autoplayPolicy: 'no-user-gesture-required'
     }
   });
+
+  // Windows 下使用最高置顶层，确保覆盖希沃白板等全屏置顶应用
+  if (IS_WINDOWS) {
+    win.setAlwaysOnTop(true, 'screen-saver');
+  }
 
   pickResultWindow = win;
   isPickResultWindowReady = false;
@@ -480,6 +514,12 @@ function openPickResultWindow(results) {
   const openResultWindow = () => {
     if (!pickResultWindow || pickResultWindow.isDestroyed()) {
       return;
+    }
+    // Windows 下刷新屏幕边界并确保置顶层（屏幕可能变化）
+    if (IS_WINDOWS) {
+      const bounds = getScreenBounds();
+      pickResultWindow.setBounds(bounds);
+      pickResultWindow.setAlwaysOnTop(true, 'screen-saver');
     }
     pickResultWindow.webContents.send('pick-result:open', {
       token: activePickResultToken,
