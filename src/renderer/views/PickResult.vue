@@ -4,18 +4,22 @@
 本文总结 [src/renderer/views/PickResult.vue](src/renderer/views/PickResult.vue) 的结构与方法，便于后续维护。
 
 ## 模块概览
-- 作用：抽取结果展示页，包含信件飞入动画 + 姓名依次展开 + 抽取音效。
+- 作用：抽取结果展示页，屏幕中央圆角面板 + 信件飞入动画 + 姓名依次展开 + 抽取音效。
 - 技术：Vue 3 `<script setup>`，渲染端通过 `window.pickResultApi` 获取结果与配置。
-- 行为：点击任意位置或按 `Esc` 关闭结果页。
+- 行为：点击面板外区域或按 `Esc` 关闭结果页。
 
 ## 页面结构（Template）
-- 容器：`.result-stage` 全屏遮罩，负责点击关闭。
-- 结果行：`.result-rows` 可单排或双排。
+- `.result-stage`：全屏透明容器，点击即关闭（`@click.stop` 阻止面板内点击冒泡）。
+- `.result-panel`：屏幕中央圆角长条面板，白底半透明 + 毛玻璃 + 实线边框。
+  - 飞入动画 `is-fly-in`：`stagePhase` 为 opening/reveal/ready 时触发。
+  - 退出动画 `is-closing`：`isClosing` 时触发。
+- `.result-rows`：信件行容器，可单排或双排。
   - `topRow`：最多 5 个结果。
   - `bottomRow`：第 6 个及之后结果。
-- 卡片：`.letter-card` 信封图片，延迟入场动画。
-- 名字卡：`.name-card` 依次展开显示。
-- 提示文案：有结果时显示 `.result-hint`，否则显示 `.result-empty`。
+- `.letter-card`：信封图片，延迟飞入动画。
+- `.name-card`：姓名卡，依次展开显示。
+- `.result-hint`：提示文字（`#66ccff` 胶囊底 + 白字）。
+- `.result-empty`：空结果提示。
 
 ## 关键状态（Refs / Computed）
 - `results`：当前抽取结果数组（对象含 `name`）。
@@ -51,24 +55,28 @@
 - `close()`：关闭结果窗口。
 
 ## 动画与时序
+- 面板飞入：`.result-panel.is-fly-in` → `panel-fly-in`（0.7s，`scale(0.85)→1` + `translateY(16px)→0`）。
+- 面板退出：`.result-panel.is-closing` → `panel-fly-out`（0.2s，`scale(1)→0.9` + `translateY(0)→8px`）。
 - 信封飞入：`.letter-card` 使用 `letter-fly-in` 动画，延迟 `index * 0.12s`。
-- 姓名展开：`.name-card.is-reveal` 使用 `name-reveal` 动画，延迟 `index * 0.12s + 0.1s`。
-- 关闭淡出：`.result-stage.is-closing` 使用 `result-fade-out` 动画（220ms），同时 `pointer-events: none` 防止重复点击。
+- 姓名展开：`.name-card.is-reveal` 使用 `name-reveal` 动画（0.3s），延迟 `index * 0.12s + 0.1s`。
+- 舞台淡出：`.result-stage.is-closing` 使用 `result-fade-out`（220ms）。
 
 ## 资源路径解析
 - `resolveAssetUrl(relativePath)`：兼容 `file://` 与 `http://` 协议的资产路径解析，用于加载音效文件。
 - 音效文件：`/sound/gacha_loading.wav`。
 
 ## 维护注意事项
+- 面板使用 `@click.stop` 阻止事件冒泡到 `.result-stage`，确保点击面板内部不会关闭。
 - 任何新增交互需调用 `closeResult()`，确保状态机与计时器正确清理。
 - token 由主进程下发，避免 reset 与 open 的竞态。
+- `.result-panel` 初始 `opacity: 0` + `transform` 偏移，通过 `is-fly-in` class 触发入场动画。
 -->
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 const results = ref([])
 const animationKey = ref(0)
-const instructionText = ref('点击任意位置关闭')
+const instructionText = ref('点击区域外任意位置关闭')
 const revealStarted = ref(false)
 const canClose = ref(false)
 const stagePhase = ref('idle')
@@ -308,36 +316,38 @@ onBeforeUnmount(() => {
     @click="handleStageClick"
     @keydown="handleKeydown"
   >
-    <div class="result-rows" :class="{ 'is-two-rows': isTwoRows }" :key="animationKey">
-      <div class="result-row">
-        <div
-          v-for="(item, index) in topRow"
-          :key="`top-${index}-${item.name}`"
-          class="letter-card"
-          :style="{ '--index': index }"
-        >
-          <img class="letter-img" src="/image/letter.png" alt="letter" />
-          <div class="name-card" :class="{ 'is-reveal': revealStarted }" :style="{ '--reveal-index': index }">
-            <span>{{ item.name }}</span>
+    <div class="result-panel" :class="{ 'is-fly-in': stagePhase === 'opening' || stagePhase === 'reveal' || stagePhase === 'ready', 'is-closing': isClosing }" @click.stop>
+      <div class="result-rows" :class="{ 'is-two-rows': isTwoRows }" :key="animationKey">
+        <div class="result-row">
+          <div
+            v-for="(item, index) in topRow"
+            :key="`top-${index}-${item.name}`"
+            class="letter-card"
+            :style="{ '--index': index }"
+          >
+            <img class="letter-img" src="/image/letter.png" alt="letter" />
+            <div class="name-card" :class="{ 'is-reveal': revealStarted }" :style="{ '--reveal-index': index }">
+              <span>{{ item.name }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="isTwoRows" class="result-row">
+          <div
+            v-for="(item, index) in bottomRow"
+            :key="`bottom-${index}-${item.name}`"
+            class="letter-card"
+            :style="{ '--index': index + 5 }"
+          >
+            <img class="letter-img" src="/image/letter.png" alt="letter" />
+            <div class="name-card" :class="{ 'is-reveal': revealStarted }" :style="{ '--reveal-index': index + 5 }">
+              <span>{{ item.name }}</span>
+            </div>
           </div>
         </div>
       </div>
-      <div v-if="isTwoRows" class="result-row">
-        <div
-          v-for="(item, index) in bottomRow"
-          :key="`bottom-${index}-${item.name}`"
-          class="letter-card"
-          :style="{ '--index': index + 5 }"
-        >
-          <img class="letter-img" src="/image/letter.png" alt="letter" />
-          <div class="name-card" :class="{ 'is-reveal': revealStarted }" :style="{ '--reveal-index': index + 5 }">
-            <span>{{ item.name }}</span>
-          </div>
-        </div>
-      </div>
+      <p v-if="results.length" class="result-hint">{{ instructionText }}</p>
+      <p v-else class="result-empty">暂无抽取结果</p>
     </div>
-    <p v-if="results.length" class="result-hint">{{ instructionText }}</p>
-    <p v-else class="result-empty">暂无抽取结果</p>
   </div>
 </template>
 
@@ -347,17 +357,61 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 26px;
-  background: rgba(0, 0, 0, 0.35);
   outline: none;
 }
 
 .result-stage.is-closing {
   pointer-events: none;
   animation: result-fade-out 220ms ease forwards;
+}
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 20px 36px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  border: 4px solid #66ccff;
+  box-shadow: 0 8px 32px rgba(6, 22, 48, 0.15);
+  min-width: 280px;
+  max-width: 95vw;
+  opacity: 0;
+  transform: scale(0.85) translateY(16px);
+}
+
+.result-panel.is-fly-in {
+  animation: panel-fly-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.result-panel.is-closing {
+  pointer-events: none;
+  animation: panel-fly-out 0.2s ease forwards;
+}
+@keyframes panel-fly-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes panel-fly-out {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9) translateY(8px);
+  }
 }
 
 .result-rows {
@@ -414,24 +468,25 @@ onBeforeUnmount(() => {
 }
 
 .name-card.is-reveal {
-  animation: name-reveal 0.45s ease-out forwards;
+  animation: name-reveal 0.3s ease-out forwards;
   animation-delay: calc(var(--reveal-index) * 0.12s + 0.1s);
 }
 
 .result-hint {
   margin: 0;
-  font-size: 16px;
-  color: rgb(255, 255, 255);
+  font-size: 13px;
+  color: #ffffff;
   letter-spacing: 2px;
-  border: 2px dashed rgba(255, 255, 255, 0.75);
+  background: #66ccff;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: 999px;
+  font-weight: 500;
 }
 
 .result-empty {
   margin: 0;
-  font-size: 20px;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 18px;
+  color: #b9dcff;
   letter-spacing: 2px;
 }
 
