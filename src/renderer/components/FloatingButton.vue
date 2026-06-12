@@ -59,6 +59,7 @@
 - 点击音效：`/sound/button_click.wav`
 
 ## 样式要点
+- `.floating-root` 不得设 `width/height: 100%`，必须收缩到按钮自身大小，否则全屏遮挡 picker 控件。
 - `.floating-button` 使用渐变背景、hover 阴影、active 反馈。
 - `.floating-button.is-dragging` 禁用 hover/active 动画，避免拖拽抖动。
 - 图标和文字 `pointer-events: none` 防止干扰拖拽。
@@ -69,6 +70,7 @@
 - `dragDisabled` prop 影响 `updateIgnoreMouse()` 的判断分支，picker 打开时强制捕获鼠标。
 - `handlePointerUp` 中非拖拽分支强制清 `isHovering` 后，若鼠标仍在按钮内必须恢复，否则窗口会错误进入穿透模式。
 - `watch(dragDisabled)` 解决 Vue prop 传播与同步 `updateIgnoreMouse()` 之间的时序竞争：picker 打开/关闭时确保以正确的 prop 值重评估。
+- **`.floating-root` 严禁 `width/height: 100%`**，否则会形成全屏透明遮挡层，使胶囊控件和 X/✓ 按钮无法点击。
 - `AudioContext` 在用户手势下恢复，避免播放被阻止。
 -->
 <template>
@@ -361,8 +363,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .floating-root {
-  width: 100%;
-  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;

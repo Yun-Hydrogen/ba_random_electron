@@ -9,12 +9,18 @@
 
 ## 页面结构（Template）
 - `FloatingButton`：可拖拽圆形悬浮按钮（居中）。
-- `picker-capsule`：悬浮按钮正上方的胶囊形水平控件条。
+- `picker-capsule`：悬浮按钮正上方的胶囊形水平控件条（间距 8px）。
   - 从左到右：`MIN` | `−` | 人数 | `+` | `MAX`，竖线分隔。
-  - 样式：`border-radius: 999px` 胶囊形，蓝白渐变 + 发光阴影。
+  - 样式：`border-radius: 999px` 胶囊形，白底 `#66ccff` 描边 + 发光阴影。
+  - 人数格：`background: #66ccff` + 白色字，`align-self: stretch` 撑满胶囊高度。
+  - `−` / `+` 按钮字体加大：`clamp(16px, …, 22px)`。
 - `picker-actions`：X 关闭（左侧）与 ✓ 确认（右侧）圆形按钮。
   - 定位：±90° 旋转，与悬浮按钮圆心水平持平。
   - 尺寸：`calc(var(--action-size) * 1.05)`。
+
+## 关键布局约束
+- **`.picker-layer`** 不得设置 `pointer-events: none`，否则子元素全部无法点击。
+- **`FloatingButton` 的 `.floating-root`** 不得有 `width/height: 100%`，否则全屏遮挡胶囊控件。
 
 ## 关键状态
 - `isPickerOpen`：是否展示选择 UI。
@@ -228,6 +234,8 @@ function setMaxCount() {
 watch(isPickerOpen, (open) => {
   if (!window.floatingButtonApi) return
   if (open) {
+    // 每次展开重置为默认人数
+    count.value = MIN_COUNT
     // picker 打开：窗口必须捕获鼠标事件，否则环绕控件无法点击
     window.floatingButtonApi.setIgnoreMouseEvents(false)
     if (typeof window.floatingButtonApi.setExpanded === 'function') {
@@ -269,7 +277,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
   z-index: 5;
 }
 
@@ -283,7 +290,7 @@ onMounted(() => {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, calc(-50% - var(--size-px) / 2 - var(--ring-thickness) / 2 - 6px));
+  transform: translate(-50%, calc(-50% - var(--size-px) / 2 - var(--ring-thickness) / 2 - 8px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -333,6 +340,14 @@ onMounted(() => {
   filter: grayscale(1);
 }
 
+/* − / + 按钮加大，确保垂直居中 */
+.capsule-btn:nth-of-type(2),
+.capsule-btn:nth-of-type(3) {
+  font-size: clamp(24px, calc(var(--ring-thickness) * 0.42), 24px);
+  min-width: calc(var(--ring-thickness) * 0.65);
+  line-height: 1;
+}
+
 .capsule-divider {
   display: inline-block;
   width: 1px;
@@ -345,17 +360,18 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: stretch;
   min-width: calc(var(--ring-thickness) * 0.9);
-  padding: 0 4px;
-  cursor: default;
-  color: #1a3a5c;
+  padding: 0 8px;
+  background: #66ccff;
+  border-radius: 8px;
+  color: #ffffff;
   font-size: clamp(16px, calc(var(--ring-thickness) * 0.42), 26px);
   font-weight: 700;
   font-family: "Bahnschrift", "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
 }
 
 .capsule-count-value {
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.6);
   line-height: 1;
 }
 
