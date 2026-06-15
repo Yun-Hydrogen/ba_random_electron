@@ -68,5 +68,23 @@ function registerIpcHandlers() {
 }
 
 module.exports = {
-  registerIpcHandlers
+  registerIpcHandlers,
+  registerConfigPanelIpc
 };
+
+// 配置面板 IPC（在 configPanel window 创建后注册，避免命名冲突）
+function registerConfigPanelIpc() {
+  ipcMain.handle('config-panel:get-config', () => {
+    return config.refreshConfig();
+  });
+
+  ipcMain.handle('config-panel:save-config', (_event, payload) => {
+    const normalized = config.normalizeConfig(payload);
+    config.saveConfig(normalized);
+    return { ok: true };
+  });
+
+  ipcMain.on('config-panel:close', (_event, payload) => {
+    windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
+  });
+}

@@ -99,6 +99,14 @@ let activeSessionId = 0
 
 const playGachaSound = ref(true)
 const gachaSoundVolume = ref(0.6)
+const panelOpacity = ref(0.9)
+const panelBgColor = ref('#ffffff')
+const panelBorderColor = ref('#66ccff')
+
+const panelStyle = computed(() => ({
+  background: `${panelBgColor.value}${Math.round(panelOpacity.value * 255).toString(16).padStart(2, '0')}`,
+  borderColor: panelBorderColor.value
+}))
 
 const topRow = computed(() => results.value.slice(0, 5))
 const bottomRow = computed(() => results.value.slice(5))
@@ -269,6 +277,9 @@ async function loadSoundConfig() {
   const cfg = await window.pickResultApi.getConfig()
   playGachaSound.value = Boolean(cfg?.defaultPlayGachaSound)
   gachaSoundVolume.value = Number(cfg?.gachaSoundVolume)
+  panelOpacity.value = Number(cfg?.panelOpacity) || 0.9
+  panelBgColor.value = cfg?.panelBgColor || '#ffffff'
+  panelBorderColor.value = cfg?.panelBorderColor || '#66ccff'
 }
 
 let removeOpenListener = null
@@ -316,7 +327,7 @@ onBeforeUnmount(() => {
     @click="handleStageClick"
     @keydown="handleKeydown"
   >
-    <div class="result-panel" :class="{ 'is-fly-in': stagePhase === 'opening' || stagePhase === 'reveal' || stagePhase === 'ready', 'is-closing': isClosing }" @click.stop>
+    <div class="result-panel" :class="{ 'is-fly-in': stagePhase === 'opening' || stagePhase === 'reveal' || stagePhase === 'ready', 'is-closing': isClosing }" :style="panelStyle" @click.stop>
       <div class="result-rows" :class="{ 'is-two-rows': isTwoRows }" :key="animationKey">
         <div class="result-row">
           <div

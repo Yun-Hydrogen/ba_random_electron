@@ -105,9 +105,12 @@ app.whenReady().then(() => {
 
   // 创建系统托盘
   tray.createTray({
-    onOpenConfig: () => config.openConfigPageInBrowser(),
+    onOpenConfig: () => windows.openConfigPanelWindow(),
     onQuit: () => app.quit()
   });
+
+  // 注册配置面板 IPC 通道
+  ipc.registerConfigPanelIpc();
 
   // 独立检查更新并发送通知 (不阻塞主线程)
   update.checkUpdateFromMain().then(res => {

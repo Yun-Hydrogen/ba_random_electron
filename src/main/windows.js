@@ -30,6 +30,8 @@ let isDebugMode = false;
 let isQuitting = false;
 let floatingExpanded = false;
 let floatingExpandedSize = null;
+let configPanelWindow = null;
+let isConfigPanelOpen = false;
 
 // 动画与抽取算法参数
 const FLOATING_WINDOW_FADE_MS = 400;
@@ -604,17 +606,94 @@ function pickStudentsByWeight(count) {
   return picked;
 }
 
+// 配置面板窗口
+function createConfigPanelWindow() {
+  if (configPanelWindow && !configPanelWindow.isDestroyed()) {
+    configPanelWindow.show();
+    configPanelWindow.focus();
+    return configPanelWindow;
+  }
+
+  const win = new BrowserWindow({
+    width: 720,
+    height: 640,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: !isDebugMode,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  configPanelWindow = win;
+  win.setMenuBarVisibility(false);
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
+  } else {
+    win.loadURL(`file://${path.join(__dirname, '../dist/index.html')}#/config-panel`);
+  }
+
+  if (isDebugMode) {
+    win.webContents.openDevTools({ mode: 'detach' });
+  }
+
+  win.on('closed', () => {
+    configPanelWindow = null;
+    isConfigPanelOpen = false;
+    fadeInFloatingButtonWindow();
+  });
+
+  return win;
+}
+
+function openConfigPanelWindow() {
+  isConfigPanelOpen = true;
+  isFloatingHiddenForPickCount = true;
+  fadeOutFloatingButtonWindow();
+  createConfigPanelWindow();
+}
+
+function closeConfigPanelWindow(saved) {
+  isConfigPanelOpen = false;
+  isFloatingHiddenForPickCount = false;
+
+  if (saved) {
+    refreshFloatingButtonWindow();
+  }
+
+  if (configPanelWindow && !configPanelWindow.isDestroyed()) {
+    configPanelWindow.close();
+  }
+  configPanelWindow = null;
+}
+
+function getConfigPanelWindow() {
+  return configPanelWindow;
+}
+
 module.exports = {
+  closeConfigPanelWindow,
+  closeConfigPanelWindow,
   closePickResultWindow,
+  createConfigPanelWindow,
   createFloatingButtonWindow,
   createPickResultWindowInstance,
   fadeInFloatingButtonWindow,
+  getConfigPanelWindow,
   getCurrentPickResults,
   getFloatingButtonWindow,
   getPickResultWindow,
   handleDragEnd,
   handleDragMove,
   handleDragStart,
+  openConfigPanelWindow,
   openPickResultWindow,
   persistFloatingButtonPosition,
   pickStudentsByWeight,

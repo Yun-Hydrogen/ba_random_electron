@@ -38,7 +38,10 @@ const DEFAULT_CONFIG = {
   },
   pickResultDialog: {
     defaultPlayGachaSound: true,
-    gachaSoundVolume: 0.6
+    gachaSoundVolume: 0.6,
+    panelOpacity: 0.9,
+    panelBgColor: '#ffffff',
+    panelBorderColor: '#66ccff'
   },
   webConfig: {
     port: 21219,
@@ -130,7 +133,21 @@ function normalizeConfig(input) {
         0,
         1,
         DEFAULT_CONFIG.pickResultDialog.gachaSoundVolume
-      )
+      ),
+      panelOpacity: clampNumber(
+        pickResult.panelOpacity,
+        0.1,
+        1,
+        DEFAULT_CONFIG.pickResultDialog.panelOpacity
+      ),
+      panelBgColor:
+        typeof pickResult.panelBgColor === 'string' && pickResult.panelBgColor
+          ? pickResult.panelBgColor
+          : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
+      panelBorderColor:
+        typeof pickResult.panelBorderColor === 'string' && pickResult.panelBorderColor
+          ? pickResult.panelBorderColor
+          : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
     },
     webConfig: {
       port: Math.round(clampNumber(web.port, 1, 65535, DEFAULT_CONFIG.webConfig.port)),

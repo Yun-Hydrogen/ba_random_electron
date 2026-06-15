@@ -41,4 +41,9 @@ contextBridge.exposeInMainWorld("logApi", { send: (level, text) => ipcRenderer.s
 	level,
 	text
 }) });
+contextBridge.exposeInMainWorld("configPanelApi", {
+	getConfig: () => ipcRenderer.invoke("config-panel:get-config"),
+	saveConfig: (config) => ipcRenderer.invoke("config-panel:save-config", config),
+	close: (saved) => ipcRenderer.send("config-panel:close", { saved })
+});
 //#endregion

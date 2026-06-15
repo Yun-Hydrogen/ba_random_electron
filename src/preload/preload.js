@@ -95,3 +95,10 @@ contextBridge.exposeInMainWorld('logApi', {
   send: (level, text) => ipcRenderer.send('renderer:log', { level, text })
 });
 
+// 配置面板桥接 API
+contextBridge.exposeInMainWorld('configPanelApi', {
+  getConfig: () => ipcRenderer.invoke('config-panel:get-config'),
+  saveConfig: (config) => ipcRenderer.invoke('config-panel:save-config', config),
+  close: (saved) => ipcRenderer.send('config-panel:close', { saved })
+});
+

@@ -2382,7 +2382,10 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		},
 		pickResultDialog: {
 			defaultPlayGachaSound: true,
-			gachaSoundVolume: .6
+			gachaSoundVolume: .6,
+			panelOpacity: .9,
+			panelBgColor: "#ffffff",
+			panelBorderColor: "#66ccff"
 		},
 		webConfig: {
 			port: 21219,
@@ -2440,7 +2443,10 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			},
 			pickResultDialog: {
 				defaultPlayGachaSound: typeof pickResult.defaultPlayGachaSound === "boolean" ? pickResult.defaultPlayGachaSound : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
-				gachaSoundVolume: clampNumber(pickResult.gachaSoundVolume, 0, 1, DEFAULT_CONFIG.pickResultDialog.gachaSoundVolume)
+				gachaSoundVolume: clampNumber(pickResult.gachaSoundVolume, 0, 1, DEFAULT_CONFIG.pickResultDialog.gachaSoundVolume),
+				panelOpacity: clampNumber(pickResult.panelOpacity, .1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
+				panelBgColor: typeof pickResult.panelBgColor === "string" && pickResult.panelBgColor ? pickResult.panelBgColor : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
+				panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
 			},
 			webConfig: {
 				port: Math.round(clampNumber(web.port, 1, 65535, DEFAULT_CONFIG.webConfig.port)),
@@ -2872,6 +2878,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var isQuitting = false;
 	var floatingExpanded = false;
 	var floatingExpandedSize = null;
+	var configPanelWindow = null;
 	var FLOATING_WINDOW_FADE_MS = 400;
 	var WEIGHT_BOOST_GAMMA = 1.5;
 	function setDebugMode(value) {
@@ -3270,17 +3277,69 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		return picked;
 	}
+	function createConfigPanelWindow() {
+		if (configPanelWindow && !configPanelWindow.isDestroyed()) {
+			configPanelWindow.show();
+			configPanelWindow.focus();
+			return configPanelWindow;
+		}
+		const win = new BrowserWindow$1({
+			width: 720,
+			height: 640,
+			resizable: false,
+			minimizable: false,
+			maximizable: false,
+			frame: false,
+			transparent: true,
+			alwaysOnTop: true,
+			skipTaskbar: !isDebugMode,
+			webPreferences: {
+				preload: path$1.join(__dirname, "preload.js"),
+				contextIsolation: true,
+				nodeIntegration: false
+			}
+		});
+		configPanelWindow = win;
+		win.setMenuBarVisibility(false);
+		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
+		else win.loadURL(`file://${path$1.join(__dirname, "../dist/index.html")}#/config-panel`);
+		if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
+		win.on("closed", () => {
+			configPanelWindow = null;
+			fadeInFloatingButtonWindow();
+		});
+		return win;
+	}
+	function openConfigPanelWindow() {
+		isFloatingHiddenForPickCount = true;
+		fadeOutFloatingButtonWindow();
+		createConfigPanelWindow();
+	}
+	function closeConfigPanelWindow(saved) {
+		isFloatingHiddenForPickCount = false;
+		if (saved) refreshFloatingButtonWindow();
+		if (configPanelWindow && !configPanelWindow.isDestroyed()) configPanelWindow.close();
+		configPanelWindow = null;
+	}
+	function getConfigPanelWindow() {
+		return configPanelWindow;
+	}
 	module.exports = {
+		closeConfigPanelWindow,
+		closeConfigPanelWindow,
 		closePickResultWindow,
+		createConfigPanelWindow,
 		createFloatingButtonWindow,
 		createPickResultWindowInstance,
 		fadeInFloatingButtonWindow,
+		getConfigPanelWindow,
 		getCurrentPickResults,
 		getFloatingButtonWindow,
 		getPickResultWindow,
 		handleDragEnd,
 		handleDragMove,
 		handleDragStart,
+		openConfigPanelWindow,
 		openPickResultWindow,
 		persistFloatingButtonPosition,
 		pickStudentsByWeight,
@@ -3339,7 +3398,23 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			windows.setFloatingButtonExpanded(payload);
 		});
 	}
-	module.exports = { registerIpcHandlers };
+	module.exports = {
+		registerIpcHandlers,
+		registerConfigPanelIpc
+	};
+	function registerConfigPanelIpc() {
+		ipcMain$1.handle("config-panel:get-config", () => {
+			return config.refreshConfig();
+		});
+		ipcMain$1.handle("config-panel:save-config", (_event, payload) => {
+			const normalized = config.normalizeConfig(payload);
+			config.saveConfig(normalized);
+			return { ok: true };
+		});
+		ipcMain$1.on("config-panel:close", (_event, payload) => {
+			windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
+		});
+	}
 }));
 //#endregion
 //#region src/main/logging.js
@@ -3656,9 +3731,10 @@ app.whenReady().then(() => {
 		admin
 	});
 	tray.createTray({
-		onOpenConfig: () => config.openConfigPageInBrowser(),
+		onOpenConfig: () => windows.openConfigPanelWindow(),
 		onQuit: () => app.quit()
 	});
+	ipc.registerConfigPanelIpc();
 	update.checkUpdateFromMain().then((res) => {
 		if (res.ok && res.status === "update") {
 			const { Notification, shell } = require("electron");

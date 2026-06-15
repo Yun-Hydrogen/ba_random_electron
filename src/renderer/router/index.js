@@ -11,12 +11,14 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import Floating from '../views/Floating.vue'
 import PickResult from '../views/PickResult.vue'
 import WebConfig from '../views/WebConfig.vue'
+import ConfigPanel from '../views/ConfigPanel.vue'
 
 // 视图路由表
 const routes = [
   { path: '/', component: Floating },
   { path: '/pick-result', component: PickResult },
-  { path: '/config', component: WebConfig }
+  { path: '/config', component: WebConfig },
+  { path: '/config-panel', component: ConfigPanel }
 ]
 
 // 使用 Hash 路由以兼容本地文件访问
