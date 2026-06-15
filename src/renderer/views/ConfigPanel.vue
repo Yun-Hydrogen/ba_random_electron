@@ -4,26 +4,35 @@
 本文总结 [src/renderer/views/ConfigPanel.vue] 的结构与方法，便于后续 AI 维护。
 
 ## 模块概览
-- 作用：新配置面板，替代旧 Web 配置页。窗口 800×680，面板填满窗口。
+- 作用：新配置面板，替代旧 Web 配置页。窗口 720×640，面板填满窗口。
 - 技术：Vue 3 `<script setup>`，通过 `window.configPanelApi` 与主进程 IPC 通信。
 
-## 设置窗口
-- 窗口 800×680 固定（`resizable: false`），面板 `width/height: 100%` 填满，无圆角边框（`border-radius: 0; border: none`）。
-- 入场/退场动画（CSS）：`panel-fly-in` 0.3s `scale(0.92)→1` + 淡入 / `panel-fly-out` 0.2s `scale→0.95` + 淡出。
+## 设置窗口 & 动画
+- 窗口 720×640 固定（`resizable: false`），面板 `width/height: 100%` 填满，`border-radius: 8px` + `1.5px solid` 主题色动态边框。
+- **入场动画**：`.config-panel` 加载时 `panel-fly-in` 0.3s，`scale(0.92)→1` + 淡入。
+- **退场动画**：关闭前 `.config-overlay` 添加 `.is-closing` class，触发 `panel-fly-out` 0.2s `scale→0.95` + 淡出。`closeWithAnimation()` 延迟 200ms 后调用 `close()`。
 
-## Tab 胶囊滑块导航（等宽不贴边）
-- 导轨：28px 高，白色药丸形 + 2px 主题色边框，`width: fit-content` 居中，`gap: 4px`。
-- 滑块：主题色胶囊，±3px 悬浮，`left` 0.28s / `width` 0.12s 过渡。
-- **未选中 Tab**：仅图标显示，文字 `max-width: 0; opacity: 0; overflow: hidden` 平滑收起（0.25s transition）。
-- **选中 Tab**：文字展开，`max-width: 80px; opacity: 1`。
-- 滑块宽度通过 `updateSlider()` 测量 `.tab-label` 实际文字宽度 + 20px padding。
+## Tab 胶囊滑块导航
+- 导轨：28px 高，白色药丸形 + 2px 主题色边框，`width: min(520px, calc(100% - 40px))` 居中，`gap: 4px`。
+- 滑块：主题色胶囊，±3px 悬浮，`left` 0.28s / `width` 0.28s 过渡。
+- **滑块宽度固定 80px**（每个 Tab 图标+4字宽度一致），无需动态测量，切换无滞后。
+- **未选中 Tab**：仅图标显示，文字 `max-width: 0; opacity: 0` 平滑收起（0.2s transition）。
+- **选中 Tab**：文字展开，`max-width: 64px; opacity: 1`。`flex: 1 1 0` 等宽分布。
+
+## 花名册空状态
+- 无名单时显示 `Arona_Empty.png`（30% 宽，0.8 不透明度）+ 文字提示。
+
+## 表单控件（现代化设计）
+- **滑条**：6px 圆角轨道 + 18px 圆形主题色滑块（`#66ccff`），白色边框 + 投影。
+- **Switch**：主题色轨 + 白色圆球滑动。
+- **颜色选择器**：`<input type="color">`，尺寸 40×28px。
 
 ## Tabs（5个，各有 SVG 图标和主题色）
-1. 花名册（#66ccff，列表）- 导入 + 权重管理
-2. 悬浮按钮（#44aadd，靶心）- 大小/置顶/位置/默认人数
-3. 结果显示（#55cc99，星形）- 透明度/背景色/边框色/音效
-4. 高级设置（#aa88dd，齿轮）- 暂无
-5. 日志输出（#99aabb，文档）- 暂无
+1. 名单管理（#66ccff，列表图标）- 导入 + 权重管理
+2. 悬浮按钮（#44aadd，靶心图标）- 大小/置顶/位置/默认人数
+3. 结果显示（#55cc99，星形图标）- 透明度/背景色/边框色/音效
+4. 高级设置（#aa88dd，齿轮图标）- 暂无
+5. 日志输出（#99aabb，文档图标）- 暂无
 
 ## 底部按钮
 - 靠右两个悬浮胶囊：取消（红色 ✕ SVG + "取消"）/ 应用（主题色 ✓ SVG + "应用并关闭"）。
@@ -31,7 +40,7 @@
 ## IPC / API 依赖
 - `configPanelApi.getConfig()` → 获取完整配置
 - `configPanelApi.saveConfig(config)` → 保存配置
-- `configPanelApi.close()` → 关闭面板
+- `configPanelApi.close(saved)` → 关闭面板
 -->
 
 <template>
@@ -162,6 +171,92 @@
             </label>
           </div>
         </div>
+
+        <!-- Tab 4: 高级设置 -->
+        <div v-show="activeTab === 'advanced'" class="tab-page">
+          <div class="section-title">系统信息</div>
+          <div class="cfg-row">
+            <label>运行状态</label>
+            <span class="cfg-badge" v-if="appInfo.isAdmin">管理员</span>
+            <span class="cfg-badge" v-if="appInfo.isUiAccess">UIAccess</span>
+            <span class="cfg-badge cfg-badge-ver">v{{ appInfo.version }}</span>
+          </div>
+          <div class="cfg-row">
+            <label>配置端口</label>
+            <input type="number" v-model.number="draft.webConfig.port" min="1" max="65535" class="cfg-input" />
+          </div>
+          <div class="cfg-row">
+            <label>配置文件</label>
+            <div class="cfg-btn-group">
+              <button class="cfg-sm-btn" @click="openConfigFile">打开文件</button>
+              <button class="cfg-sm-btn" @click="openConfigDir">打开目录</button>
+            </div>
+          </div>
+
+          <div v-if="appInfo.isWindows" class="section-title">Windows 系统</div>
+          <div v-if="appInfo.isWindows" class="cfg-row">
+            <label>管理员置顶</label>
+            <label class="switch">
+              <input type="checkbox" v-model="draft.webConfig.adminTopmostEnabled" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div v-if="appInfo.isWindows && appInfo.isAdmin" class="cfg-row">
+            <label>UIAccess 置顶</label>
+            <label class="switch">
+              <input type="checkbox" v-model="draft.webConfig.uiAccessEnabled" />
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div v-if="!appInfo.uiAccessDllExists && draft.webConfig.uiAccessEnabled" class="cfg-hint warn">
+            ⚠ 未检测到 uiaccess.dll，功能可能不可用
+          </div>
+          <div v-if="appInfo.isWindows" class="cfg-row">
+            <label>管理员重启</label>
+            <button class="cfg-sm-btn" @click="adminElevate">立即重启(管理员)</button>
+          </div>
+          <div class="cfg-row">
+            <label>重启应用</label>
+            <button class="cfg-sm-btn" @click="appRestart">重启</button>
+          </div>
+
+          <div v-if="appInfo.isWindows" class="section-title">开机启动</div>
+          <div v-if="appInfo.isWindows" class="cfg-row">
+            <label>EXE 路径</label>
+            <input type="text" v-model="draft.webConfig.adminAutoStartPath" class="cfg-input-wide" placeholder="程序路径" />
+          </div>
+          <div v-if="appInfo.isWindows" class="cfg-row">
+            <label>任务名称</label>
+            <input type="text" v-model="draft.webConfig.adminAutoStartTaskName" class="cfg-input-wide" />
+          </div>
+          <div v-if="appInfo.isWindows" class="cfg-row">
+            <label></label>
+            <button class="cfg-sm-btn" @click="createStartupTask">创建/更新计划任务</button>
+          </div>
+
+          <div class="section-title">更新检查</div>
+          <div class="cfg-row">
+            <label></label>
+            <button class="cfg-sm-btn" :disabled="updateLoading" @click="checkUpdate">{{ updateLoading ? '检查中...' : '检查更新' }}</button>
+          </div>
+          <div v-if="updateStatus" class="cfg-hint" :class="updateStatus">{{ updateTitle }}</div>
+          <div v-if="updateDetail" class="update-detail-text">{{ updateDetail }}</div>
+        </div>
+
+        <!-- Tab 5: 日志输出 -->
+        <div v-show="activeTab === 'logs'" class="tab-page">
+          <div class="log-head">
+            <span class="log-head-title">运行日志</span>
+            <button class="cfg-sm-btn" @click="clearLogs">清空</button>
+          </div>
+          <div class="log-list" ref="logListRef">
+            <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
+            <div v-for="item in logs" :key="item.id" class="log-row" :class="'log-' + item.level">
+              <span class="log-time">{{ item.time }}</span>
+              <span class="log-msg">{{ item.text }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 底部悬浮胶囊按钮 -->
@@ -180,7 +275,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 const tabs = [
   { id: 'roster', label: '名单管理', color: '#66ccff',
@@ -225,7 +320,8 @@ const draft = reactive({
   allowRepeatDraw: true,
   floatingButton: { sizePercent: 100, alwaysOnTop: true, position: { x: null, y: null } },
   pickCountDialog: { defaultCount: 1 },
-  pickResultDialog: { defaultPlayGachaSound: true, panelOpacity: 0.9, panelBgColor: '#ffffff', panelBorderColor: '#66ccff' }
+  pickResultDialog: { defaultPlayGachaSound: true, panelOpacity: 0.9, panelBgColor: '#ffffff', panelBorderColor: '#66ccff' },
+  webConfig: { port: 21219, adminTopmostEnabled: false, adminAutoStartEnabled: false, adminAutoStartPath: '', adminAutoStartTaskName: 'Blue Random (Admin)', uiAccessEnabled: false }
 })
 
 const currentTab = computed(() => tabs.find(t => t.id === activeTab.value))
@@ -304,7 +400,49 @@ async function handleApply() {
   }
 }
 
+// ---- 高级设置 ----
+const appInfo = reactive({ isAdmin: false, isUiAccess: false, isWindows: false, uiAccessDllExists: false, configPath: '', configDir: '', exePath: '', version: '' })
+const updateLoading = ref(false)
+const updateStatus = ref('')
+const updateTitle = ref('')
+const updateDetail = ref('')
+async function fetchAppInfo() { if (window.configPanelApi?.getAppInfo) Object.assign(appInfo, await window.configPanelApi.getAppInfo() || {}) }
+async function openConfigFile() { await window.configPanelApi?.openConfigFile() }
+async function openConfigDir() { await window.configPanelApi?.openConfigDir() }
+async function adminElevate() { await window.configPanelApi?.adminElevate() }
+async function appRestart() { await window.configPanelApi?.restart() }
+async function createStartupTask() { await window.configPanelApi?.createStartupTask({ exePath: draft.webConfig.adminAutoStartPath || appInfo.exePath, taskName: draft.webConfig.adminAutoStartTaskName }) }
+async function checkUpdate() {
+  updateLoading.value = true; updateStatus.value = ''; updateTitle.value = ''; updateDetail.value = ''
+  const r = await window.configPanelApi?.checkUpdate()
+  updateLoading.value = false
+  if (r) { updateStatus.value = r.status || ''; updateTitle.value = r.title || ''; updateDetail.value = r.detail || '' }
+}
+
+// ---- 日志输出 ----
+const logs = ref([])
+let logSeed = 0
+let logSource = null
+
+function addLog(level, text, timeOverride) {
+  const time = timeOverride || new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  logs.value.unshift({ id: `${Date.now()}-${logSeed++}`, level, text, time })
+  if (logs.value.length > 200) logs.value.length = 200
+}
+
+function startLogStream() {
+  if (logSource) logSource.close()
+  logSource = new EventSource('/api/logs')
+  logSource.onmessage = (e) => {
+    try { const d = JSON.parse(e.data); addLog(d.level || 'info', d.text || '', d.time ? new Date(d.time).toLocaleTimeString('zh-CN', { hour12: false }) : undefined) } catch {}
+  }
+}
+
+function clearLogs() { logs.value = []; addLog('info', '日志已清空') }
+
 onMounted(async () => {
+  startLogStream()
+  fetchAppInfo()
   if (window.configPanelApi) {
     const cfg = await window.configPanelApi.getConfig()
     if (cfg) {
@@ -314,6 +452,10 @@ onMounted(async () => {
   }
   await nextTick()
   updateSlider()
+})
+
+onBeforeUnmount(() => {
+  if (logSource) { logSource.close(); logSource = null }
 })
 </script>
 
@@ -528,4 +670,47 @@ onMounted(async () => {
 
 .capsule-cancel { background: #ff6b6b; }
 .capsule-apply { background: #66ccff; }
+
+/* ---- 日志 ---- */
+.log-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.log-head-title { font-size: 14px; font-weight: 600; color: #444; }
+.log-list {
+  max-height: 100%; overflow-y: auto;
+  font-size: 12px; font-family: 'Consolas', 'Courier New', monospace;
+}
+.log-row {
+  display: flex; gap: 8px; padding: 3px 0;
+  border-bottom: 1px solid #f8f8f8;
+}
+.log-time { color: #aaa; white-space: nowrap; flex-shrink: 0; }
+.log-msg { word-break: break-all; }
+.log-info .log-msg { color: #555; }
+.log-warn .log-msg { color: #c90; }
+.log-error .log-msg { color: #d44; }
+.log-success .log-msg { color: #4a8; }
+
+/* ---- 高级设置 ---- */
+.section-title { font-size: 13px; font-weight: 600; color: #888; margin: 16px 0 6px; }
+.cfg-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; color: #fff; background: #66ccff; margin-left: 4px;
+}
+.cfg-badge-ver { background: #aaa; }
+.cfg-btn-group { display: flex; gap: 6px; }
+.cfg-sm-btn {
+  padding: 5px 12px; border: 1px solid #ddd; border-radius: 6px;
+  background: #fff; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.cfg-sm-btn:hover { background: #f0f4f8; }
+.cfg-sm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cfg-input-wide { flex: 1; max-width: 280px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+.cfg-hint { font-size: 12px; color: #888; margin-top: 4px; }
+.cfg-hint.warn { color: #e80; }
+.cfg-hint.update { color: #4a8; }
+.cfg-hint.ok { color: #888; }
+.cfg-hint.error { color: #d44; }
+.update-detail-text { font-size: 12px; color: #888; white-space: pre-wrap; margin-top: 4px; }
 </style>

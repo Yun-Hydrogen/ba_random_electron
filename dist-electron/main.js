@@ -3353,178 +3353,6 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	};
 }));
 //#endregion
-//#region src/main/ipc.js
-var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { ipcMain: ipcMain$1 } = require("electron");
-	var config = require_config();
-	var windows = require_windows();
-	function registerIpcHandlers() {
-		ipcMain$1.handle("floating-button:get-config", () => {
-			return config.refreshConfig().floatingButton;
-		});
-		ipcMain$1.handle("floating-picker:get-config", () => {
-			return config.refreshConfig().pickCountDialog;
-		});
-		ipcMain$1.on("floating-picker:confirm", (_event, payload) => {
-			const selectedCount = Math.round(Number(payload && payload.count)) || 1;
-			const count = Math.min(10, Math.max(1, selectedCount));
-			console.log(`Pick count confirmed. count=${count}`);
-			const pickedStudents = windows.pickStudentsByWeight(count);
-			if (pickedStudents.length > 0) console.log(`Picked students: ${pickedStudents.map((s) => s.name).join(", ")}`);
-			windows.openPickResultWindow(pickedStudents);
-		});
-		ipcMain$1.handle("pick-result:get-results", () => {
-			return windows.getCurrentPickResults();
-		});
-		ipcMain$1.handle("pick-result:get-config", () => {
-			return config.refreshConfig().pickResultDialog;
-		});
-		ipcMain$1.on("pick-result:close", () => {
-			windows.closePickResultWindow();
-		});
-		ipcMain$1.on("floating-button:drag-start", (event) => {
-			windows.handleDragStart(event);
-		});
-		ipcMain$1.on("floating-button:drag-move", (event, payload) => {
-			windows.handleDragMove(event, payload);
-		});
-		ipcMain$1.on("floating-button:drag-end", (event) => {
-			windows.handleDragEnd(event);
-		});
-		ipcMain$1.on("floating-button:set-ignore-mouse", (event, ignore) => {
-			windows.setIgnoreMouseEvents(event, ignore);
-		});
-		ipcMain$1.on("floating-button:set-expanded", (_event, payload) => {
-			windows.setFloatingButtonExpanded(payload);
-		});
-	}
-	module.exports = {
-		registerIpcHandlers,
-		registerConfigPanelIpc
-	};
-	function registerConfigPanelIpc() {
-		ipcMain$1.handle("config-panel:get-config", () => {
-			return config.refreshConfig();
-		});
-		ipcMain$1.handle("config-panel:save-config", (_event, payload) => {
-			const normalized = config.normalizeConfig(payload);
-			config.saveConfig(normalized);
-			return { ok: true };
-		});
-		ipcMain$1.on("config-panel:close", (_event, payload) => {
-			windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
-		});
-	}
-}));
-//#endregion
-//#region src/main/logging.js
-var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var LOG_BUFFER_LIMIT = 600;
-	var logBuffer = [];
-	var logClients = /* @__PURE__ */ new Set();
-	function pushLog(level, text) {
-		const time = (/* @__PURE__ */ new Date()).toISOString();
-		const entry = {
-			id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-			level,
-			text: String(text),
-			time
-		};
-		logBuffer.push(entry);
-		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
-		const payload = `data: ${JSON.stringify(entry)}\n\n`;
-		for (const res of logClients) res.write(payload);
-	}
-	function attachConsoleLogger() {
-		[
-			"log",
-			"info",
-			"warn",
-			"error"
-		].forEach((method) => {
-			const original = console[method].bind(console);
-			console[method] = (...args) => {
-				const text = args.map((arg) => {
-					if (typeof arg === "string") return arg;
-					try {
-						return JSON.stringify(arg);
-					} catch (_error) {
-						return String(arg);
-					}
-				}).join(" ");
-				pushLog(method === "log" ? "info" : method, text);
-				original(...args);
-			};
-		});
-	}
-	function registerRendererLogIpc(ipcMain) {
-		ipcMain.on("renderer:log", (_event, payload) => {
-			if (!payload || typeof payload.text !== "string") return;
-			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
-		});
-	}
-	function handleLogStream(req, res) {
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream; charset=utf-8",
-			"Cache-Control": "no-cache",
-			"Connection": "keep-alive",
-			"X-Accel-Buffering": "no"
-		});
-		res.write("\n");
-		logClients.add(res);
-		logBuffer.forEach((entry) => {
-			res.write(`data: ${JSON.stringify(entry)}\n\n`);
-		});
-		req.on("close", () => {
-			logClients.delete(res);
-		});
-	}
-	module.exports = {
-		attachConsoleLogger,
-		handleLogStream,
-		pushLog,
-		registerRendererLogIpc
-	};
-}));
-//#endregion
-//#region src/main/tray-menu.js
-var require_tray_menu = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { Menu } = require("electron");
-	function buildTrayContextMenu({ onOpenConfig, onQuit }) {
-		return Menu.buildFromTemplate([{
-			label: "配置",
-			click: () => {
-				if (typeof onOpenConfig === "function") onOpenConfig();
-			}
-		}, {
-			label: "退出",
-			click: () => {
-				if (typeof onQuit === "function") onQuit();
-			}
-		}]);
-	}
-	module.exports = { buildTrayContextMenu };
-}));
-//#endregion
-//#region src/main/tray.js
-var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { Tray, nativeImage } = require("electron");
-	var path = require("path");
-	var { buildTrayContextMenu } = require_tray_menu();
-	function createTray({ onOpenConfig, onQuit }) {
-		const trayIconPath = !!process.env.VITE_DEV_SERVER_URL ? path.join(__dirname, "../public/image/tray.png") : path.join(__dirname, "../dist/image/tray.png");
-		const tray = new Tray(nativeImage.createFromPath(trayIconPath));
-		tray.setToolTip("Blue Random");
-		const trayMenu = buildTrayContextMenu({
-			onOpenConfig,
-			onQuit
-		});
-		tray.setContextMenu(trayMenu);
-		return tray;
-	}
-	module.exports = { createTray };
-}));
-//#endregion
 //#region src/main/update.js
 var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { app: app$1, net } = require("electron");
@@ -3671,6 +3499,223 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 	}
 	module.exports = { checkUpdateFromMain };
+}));
+//#endregion
+//#region src/main/ipc.js
+var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var { ipcMain: ipcMain$1 } = require("electron");
+	var config = require_config();
+	var windows = require_windows();
+	function registerIpcHandlers() {
+		ipcMain$1.handle("floating-button:get-config", () => {
+			return config.refreshConfig().floatingButton;
+		});
+		ipcMain$1.handle("floating-picker:get-config", () => {
+			return config.refreshConfig().pickCountDialog;
+		});
+		ipcMain$1.on("floating-picker:confirm", (_event, payload) => {
+			const selectedCount = Math.round(Number(payload && payload.count)) || 1;
+			const count = Math.min(10, Math.max(1, selectedCount));
+			console.log(`Pick count confirmed. count=${count}`);
+			const pickedStudents = windows.pickStudentsByWeight(count);
+			if (pickedStudents.length > 0) console.log(`Picked students: ${pickedStudents.map((s) => s.name).join(", ")}`);
+			windows.openPickResultWindow(pickedStudents);
+		});
+		ipcMain$1.handle("pick-result:get-results", () => {
+			return windows.getCurrentPickResults();
+		});
+		ipcMain$1.handle("pick-result:get-config", () => {
+			return config.refreshConfig().pickResultDialog;
+		});
+		ipcMain$1.on("pick-result:close", () => {
+			windows.closePickResultWindow();
+		});
+		ipcMain$1.on("floating-button:drag-start", (event) => {
+			windows.handleDragStart(event);
+		});
+		ipcMain$1.on("floating-button:drag-move", (event, payload) => {
+			windows.handleDragMove(event, payload);
+		});
+		ipcMain$1.on("floating-button:drag-end", (event) => {
+			windows.handleDragEnd(event);
+		});
+		ipcMain$1.on("floating-button:set-ignore-mouse", (event, ignore) => {
+			windows.setIgnoreMouseEvents(event, ignore);
+		});
+		ipcMain$1.on("floating-button:set-expanded", (_event, payload) => {
+			windows.setFloatingButtonExpanded(payload);
+		});
+	}
+	module.exports = {
+		registerIpcHandlers,
+		registerConfigPanelIpc
+	};
+	function registerConfigPanelIpc() {
+		ipcMain$1.handle("config-panel:get-config", () => {
+			return config.refreshConfig();
+		});
+		ipcMain$1.handle("config-panel:save-config", (_event, payload) => {
+			const normalized = config.normalizeConfig(payload);
+			config.saveConfig(normalized);
+			return { ok: true };
+		});
+		ipcMain$1.on("config-panel:close", (_event, payload) => {
+			windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
+		});
+		ipcMain$1.handle("config-panel:get-app-info", () => {
+			const admin = require_admin();
+			require_update();
+			return {
+				isAdmin: admin.isProcessElevated(),
+				isUiAccess: process.argv.includes(admin.UIACCESS_ARG),
+				isWindows: admin.IS_WINDOWS,
+				uiAccessDllExists: require("fs").existsSync(admin.getDefaultUiAccessDllPath()),
+				configPath: config.getConfigPath(),
+				configDir: config.getConfigDir(),
+				exePath: admin.getDefaultExePath(),
+				version: require("electron").app.getVersion()
+			};
+		});
+		ipcMain$1.handle("config-panel:admin-elevate", () => {
+			const result = require_admin().requestAdminRelaunch();
+			if (result.ok) {
+				windows.setQuitting(true);
+				setTimeout(() => require("electron").app.exit(0), 150);
+			}
+			return result;
+		});
+		ipcMain$1.handle("config-panel:restart", () => {
+			windows.setQuitting(true);
+			setTimeout(() => {
+				require("electron").app.relaunch();
+				require("electron").app.exit(0);
+			}, 80);
+			return { ok: true };
+		});
+		ipcMain$1.handle("config-panel:create-startup-task", (_event, payload) => {
+			return require_admin().createAdminStartupTask({
+				taskName: payload.taskName,
+				exePath: payload.exePath
+			});
+		});
+		ipcMain$1.handle("config-panel:open-config-file", () => {
+			return config.openConfigFile();
+		});
+		ipcMain$1.handle("config-panel:open-config-dir", () => {
+			return config.openConfigDir();
+		});
+		ipcMain$1.handle("config-panel:check-update", () => {
+			return require_update().checkUpdateFromMain();
+		});
+	}
+}));
+//#endregion
+//#region src/main/logging.js
+var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var LOG_BUFFER_LIMIT = 600;
+	var logBuffer = [];
+	var logClients = /* @__PURE__ */ new Set();
+	function pushLog(level, text) {
+		const time = (/* @__PURE__ */ new Date()).toISOString();
+		const entry = {
+			id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+			level,
+			text: String(text),
+			time
+		};
+		logBuffer.push(entry);
+		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
+		const payload = `data: ${JSON.stringify(entry)}\n\n`;
+		for (const res of logClients) res.write(payload);
+	}
+	function attachConsoleLogger() {
+		[
+			"log",
+			"info",
+			"warn",
+			"error"
+		].forEach((method) => {
+			const original = console[method].bind(console);
+			console[method] = (...args) => {
+				const text = args.map((arg) => {
+					if (typeof arg === "string") return arg;
+					try {
+						return JSON.stringify(arg);
+					} catch (_error) {
+						return String(arg);
+					}
+				}).join(" ");
+				pushLog(method === "log" ? "info" : method, text);
+				original(...args);
+			};
+		});
+	}
+	function registerRendererLogIpc(ipcMain) {
+		ipcMain.on("renderer:log", (_event, payload) => {
+			if (!payload || typeof payload.text !== "string") return;
+			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
+		});
+	}
+	function handleLogStream(req, res) {
+		res.writeHead(200, {
+			"Content-Type": "text/event-stream; charset=utf-8",
+			"Cache-Control": "no-cache",
+			"Connection": "keep-alive",
+			"X-Accel-Buffering": "no"
+		});
+		res.write("\n");
+		logClients.add(res);
+		logBuffer.forEach((entry) => {
+			res.write(`data: ${JSON.stringify(entry)}\n\n`);
+		});
+		req.on("close", () => {
+			logClients.delete(res);
+		});
+	}
+	module.exports = {
+		attachConsoleLogger,
+		handleLogStream,
+		pushLog,
+		registerRendererLogIpc
+	};
+}));
+//#endregion
+//#region src/main/tray-menu.js
+var require_tray_menu = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var { Menu } = require("electron");
+	function buildTrayContextMenu({ onOpenConfig, onQuit }) {
+		return Menu.buildFromTemplate([{
+			label: "配置",
+			click: () => {
+				if (typeof onOpenConfig === "function") onOpenConfig();
+			}
+		}, {
+			label: "退出",
+			click: () => {
+				if (typeof onQuit === "function") onQuit();
+			}
+		}]);
+	}
+	module.exports = { buildTrayContextMenu };
+}));
+//#endregion
+//#region src/main/tray.js
+var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var { Tray, nativeImage } = require("electron");
+	var path = require("path");
+	var { buildTrayContextMenu } = require_tray_menu();
+	function createTray({ onOpenConfig, onQuit }) {
+		const trayIconPath = !!process.env.VITE_DEV_SERVER_URL ? path.join(__dirname, "../public/image/tray.png") : path.join(__dirname, "../dist/image/tray.png");
+		const tray = new Tray(nativeImage.createFromPath(trayIconPath));
+		tray.setToolTip("Blue Random");
+		const trayMenu = buildTrayContextMenu({
+			onOpenConfig,
+			onQuit
+		});
+		tray.setContextMenu(trayMenu);
+		return tray;
+	}
+	module.exports = { createTray };
 }));
 //#endregion
 //#region src/main/main.js

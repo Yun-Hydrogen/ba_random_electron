@@ -87,4 +87,65 @@ function registerConfigPanelIpc() {
   ipcMain.on('config-panel:close', (_event, payload) => {
     windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
   });
+
+  // 高级设置：系统信息
+  ipcMain.handle('config-panel:get-app-info', () => {
+    const admin = require('./admin');
+    const update = require('./update');
+    return {
+      isAdmin: admin.isProcessElevated(),
+      isUiAccess: process.argv.includes(admin.UIACCESS_ARG),
+      isWindows: admin.IS_WINDOWS,
+      uiAccessDllExists: require('fs').existsSync(admin.getDefaultUiAccessDllPath()),
+      configPath: config.getConfigPath(),
+      configDir: config.getConfigDir(),
+      exePath: admin.getDefaultExePath(),
+      version: require('electron').app.getVersion()
+    };
+  });
+
+  // 管理员权限提升
+  ipcMain.handle('config-panel:admin-elevate', () => {
+    const admin = require('./admin');
+    const result = admin.requestAdminRelaunch();
+    if (result.ok) {
+      windows.setQuitting(true);
+      setTimeout(() => require('electron').app.exit(0), 150);
+    }
+    return result;
+  });
+
+  // 应用重启
+  ipcMain.handle('config-panel:restart', () => {
+    windows.setQuitting(true);
+    setTimeout(() => {
+      require('electron').app.relaunch();
+      require('electron').app.exit(0);
+    }, 80);
+    return { ok: true };
+  });
+
+  // 开机计划任务
+  ipcMain.handle('config-panel:create-startup-task', (_event, payload) => {
+    const admin = require('./admin');
+    return admin.createAdminStartupTask({
+      taskName: payload.taskName,
+      exePath: payload.exePath
+    });
+  });
+
+  // 打开配置文件/目录
+  ipcMain.handle('config-panel:open-config-file', () => {
+    return config.openConfigFile();
+  });
+
+  ipcMain.handle('config-panel:open-config-dir', () => {
+    return config.openConfigDir();
+  });
+
+  // 检查更新
+  ipcMain.handle('config-panel:check-update', () => {
+    const update = require('./update');
+    return update.checkUpdateFromMain();
+  });
 }

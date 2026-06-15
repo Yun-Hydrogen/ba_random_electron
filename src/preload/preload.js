@@ -99,6 +99,13 @@ contextBridge.exposeInMainWorld('logApi', {
 contextBridge.exposeInMainWorld('configPanelApi', {
   getConfig: () => ipcRenderer.invoke('config-panel:get-config'),
   saveConfig: (config) => ipcRenderer.invoke('config-panel:save-config', config),
-  close: (saved) => ipcRenderer.send('config-panel:close', { saved })
+  close: (saved) => ipcRenderer.send('config-panel:close', { saved }),
+  getAppInfo: () => ipcRenderer.invoke('config-panel:get-app-info'),
+  adminElevate: () => ipcRenderer.invoke('config-panel:admin-elevate'),
+  restart: () => ipcRenderer.invoke('config-panel:restart'),
+  createStartupTask: (payload) => ipcRenderer.invoke('config-panel:create-startup-task', payload),
+  openConfigFile: () => ipcRenderer.invoke('config-panel:open-config-file'),
+  openConfigDir: () => ipcRenderer.invoke('config-panel:open-config-dir'),
+  checkUpdate: () => ipcRenderer.invoke('config-panel:check-update')
 });
 
