@@ -3284,7 +3284,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			return configPanelWindow;
 		}
 		const win = new BrowserWindow$1({
-			width: 720,
+			width: 550,
 			height: 640,
 			resizable: false,
 			minimizable: false,
@@ -3721,6 +3721,11 @@ var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region src/main/main.js
 var { app, BrowserWindow, ipcMain } = require("electron");
 var fs = require("fs");
+require("path");
+var { execSync } = require("child_process");
+if (process.platform === "win32") try {
+	execSync("chcp 65001", { stdio: "ignore" });
+} catch {}
 var admin = require_admin();
 var config = require_config();
 var configServer = require_config_server();

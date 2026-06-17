@@ -22,6 +22,14 @@
 */
 const { app, BrowserWindow, ipcMain } = require('electron');
 const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+// Windows 终端编码修复：设置为 UTF-8（65001），避免中文乱码
+if (process.platform === 'win32') {
+  try { execSync('chcp 65001', { stdio: 'ignore' }); } catch {}
+}
+
 const admin = require('./admin');
 const config = require('./config');
 const configServer = require('./config-server');

@@ -615,7 +615,7 @@ function createConfigPanelWindow() {
   }
 
   const win = new BrowserWindow({
-    width: 720,
+    width: 550,
     height: 640,
     resizable: false,
     minimizable: false,
