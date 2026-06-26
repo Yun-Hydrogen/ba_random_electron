@@ -611,6 +611,8 @@ function createConfigPanelWindow() {
   if (configPanelWindow && !configPanelWindow.isDestroyed()) {
     configPanelWindow.show();
     configPanelWindow.focus();
+    // 通知渲染进程刷新配置
+    configPanelWindow.webContents.send('config-panel:refresh');
     return configPanelWindow;
   }
 
@@ -622,6 +624,7 @@ function createConfigPanelWindow() {
     maximizable: false,
     frame: false,
     transparent: true,
+    show: false,
     alwaysOnTop: true,
     skipTaskbar: !isDebugMode,
     webPreferences: {
@@ -634,14 +637,19 @@ function createConfigPanelWindow() {
   configPanelWindow = win;
   win.setMenuBarVisibility(false);
 
+  // 页面就绪后再显示，避免白屏
+  win.once('ready-to-show', () => {
+    win.show();
+    win.focus();
+    if (isDebugMode) {
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
+  });
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
   } else {
     win.loadURL(`file://${path.join(__dirname, '../dist/index.html')}#/config-panel`);
-  }
-
-  if (isDebugMode) {
-    win.webContents.openDevTools({ mode: 'detach' });
   }
 
   win.on('closed', () => {

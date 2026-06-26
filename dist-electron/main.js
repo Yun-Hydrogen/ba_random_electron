@@ -3281,6 +3281,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (configPanelWindow && !configPanelWindow.isDestroyed()) {
 			configPanelWindow.show();
 			configPanelWindow.focus();
+			configPanelWindow.webContents.send("config-panel:refresh");
 			return configPanelWindow;
 		}
 		const win = new BrowserWindow$1({
@@ -3291,6 +3292,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			maximizable: false,
 			frame: false,
 			transparent: true,
+			show: false,
 			alwaysOnTop: true,
 			skipTaskbar: !isDebugMode,
 			webPreferences: {
@@ -3301,9 +3303,13 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		});
 		configPanelWindow = win;
 		win.setMenuBarVisibility(false);
+		win.once("ready-to-show", () => {
+			win.show();
+			win.focus();
+			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
+		});
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
 		else win.loadURL(`file://${path$1.join(__dirname, "../dist/index.html")}#/config-panel`);
-		if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 		win.on("closed", () => {
 			configPanelWindow = null;
 			fadeInFloatingButtonWindow();
