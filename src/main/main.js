@@ -3,10 +3,10 @@
 职责：主进程引导入口（Bootstrap）。
 
 核心功能：
-1) 汇总并初始化主进程模块（admin/config/config-server/ipc/logging/tray/update/windows）。
+1) 汇总并初始化主进程模块（admin/config/ipc/logging/tray/update/windows）。
 2) 设置运行参数：自动播放策略、UIAccess 进程下关闭 DirectComposition。
 3) 检查启动配置，在需要时主动申请 UIAccess 或管理员权限，并执行主进程二次唤醒重启。
-4) 在 app 就绪后启动本地配置服务、创建托盘、预创建窗口并启动悬浮窗 watchdog。
+4) 在 app 就绪后创建托盘、预创建窗口并启动悬浮窗 watchdog。
 5) 绑定关键生命周期：activate 重建悬浮窗，before-quit 保存悬浮窗位置并停止 watchdog。
 
 实现说明：
@@ -14,7 +14,7 @@
 - 在 app.whenReady() 中先校验并控制进程提权（UAC/UIAccess）的启动流转。
 - 通过 ipc.registerIpcHandlers() 注册全部 IPC 通道。
 - 通过 logging.attachConsoleLogger() 将 console 输出纳入日志流。
-- 通过 configServer.startConfigServer(...) 注入依赖，避免模块间硬耦合。
+- 配置面板通过原生 Electron 窗口 + IPC 实现，不再依赖 HTTP 配置服务。
 
 维护建议：
 - 新增主进程能力优先放到独立模块，再在本文件接入。
@@ -32,7 +32,6 @@ if (process.platform === 'win32') {
 
 const admin = require('./admin');
 const config = require('./config');
-const configServer = require('./config-server');
 const ipc = require('./ipc');
 const logging = require('./logging');
 const tray = require('./tray');
@@ -100,16 +99,6 @@ app.whenReady().then(() => {
       return;
     }
   }
-
-  configServer.startConfigServer({
-    app,
-    isDebugMode,
-    config,
-    update,
-    logging,
-    windows,
-    admin
-  });
 
   // 创建系统托盘
   tray.createTray({

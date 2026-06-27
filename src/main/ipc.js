@@ -81,6 +81,8 @@ function registerConfigPanelIpc() {
   ipcMain.handle('config-panel:save-config', (_event, payload) => {
     const normalized = config.normalizeConfig(payload);
     config.saveConfig(normalized);
+    // 保存后刷新悬浮窗以应用新配置
+    windows.refreshFloatingButtonWindow();
     return { ok: true };
   });
 
@@ -162,5 +164,12 @@ function registerConfigPanelIpc() {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
+  });
+
+  // 重置所有配置为默认值
+  ipcMain.handle('config-panel:reset-config', () => {
+    config.saveConfig(config.normalizeConfig({}));
+    windows.refreshFloatingButtonWindow();
+    return { ok: true };
   });
 }

@@ -415,7 +415,7 @@ onMounted(() => {
   color: #ffffff;
 }
 .node-close:hover { 
-  transform: translate(-50%, -50%) rotate(-90deg) translateY(calc(-1 * var(--placement-radius))) rotate(90deg) scale(1.1) !important; 
+  transform: translate(-50%, -50%) rotate(-90deg) translateY(calc(-1 * var(--placement-radius))) rotate(90deg) !important; 
   border-color: rgba(255, 90, 110, 1);
   box-shadow: 0 4px 16px rgba(255, 90, 110, 0.5);
   filter: none;
@@ -425,13 +425,13 @@ onMounted(() => {
   width: calc(var(--action-size) * 1.2); height: calc(var(--action-size) * 1.2);
   transform: translate(-50%, -50%) rotate(90deg) translateY(calc(-1 * var(--placement-radius))) rotate(-90deg);
   border-radius: 50%;
-  border: 2px solid rgba(80, 255, 140, 0.6);
+  border: 2px solid rgba(166, 233, 255, 0.6);
   background: #66ccff;
   box-shadow: 0 4px 12px rgba(102, 204, 255, 0.3);
   color: #ffffff;
 }
 .node-confirm:hover { 
-  transform: translate(-50%, -50%) rotate(90deg) translateY(calc(-1 * var(--placement-radius))) rotate(-90deg) scale(1.1) !important; 
+  transform: translate(-50%, -50%) rotate(90deg) translateY(calc(-1 * var(--placement-radius))) rotate(-90deg) !important; 
   border-color: #17e3f2;
   box-shadow: 0 4px 16px rgba(80, 255, 140, 0.5);
   filter: none;

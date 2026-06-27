@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld("configPanelApi", {
 	openConfigFile: () => ipcRenderer.invoke("config-panel:open-config-file"),
 	openConfigDir: () => ipcRenderer.invoke("config-panel:open-config-dir"),
 	checkUpdate: () => ipcRenderer.invoke("config-panel:check-update"),
-	pickExeFile: () => ipcRenderer.invoke("config-panel:pick-exe-file")
+	pickExeFile: () => ipcRenderer.invoke("config-panel:pick-exe-file"),
+	resetConfig: () => ipcRenderer.invoke("config-panel:reset-config")
 });
 //#endregion

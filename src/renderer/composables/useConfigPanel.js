@@ -61,7 +61,7 @@ export function useConfigPanel() {
     floatingButton: { sizePercent: 100, alwaysOnTop: true, position: { x: null, y: null }, iconPath: '', iconSize: 48, borderColor: '#ffffff' },
     pickCountDialog: { defaultCount: 1 },
     pickResultDialog: { defaultPlayGachaSound: true, panelOpacity: 0.9, panelBgColor: '#ffffff', panelBorderColor: '#66ccff', playMusic: false, soundVolume: 80, musicVolume: 60 },
-    webConfig: { port: 21219, adminTopmostEnabled: false, adminAutoStartEnabled: false, adminAutoStartPath: '', adminAutoStartTaskName: 'Blue Random (Admin)', adminAutoStartAdmin: true, uiAccessEnabled: false }
+    webConfig: { adminTopmostEnabled: false, adminAutoStartPath: '', adminAutoStartTaskName: 'Blue Random (Admin)', adminAutoStartAdmin: true, uiAccessEnabled: false }
   })
 
   const appInfo = reactive({ isAdmin: false, isUiAccess: false, isWindows: false, uiAccessDllExists: false, configPath: '', configDir: '', exePath: '', version: '' })
@@ -101,9 +101,13 @@ export function useConfigPanel() {
       admin: draft.webConfig.adminAutoStartAdmin
     })
   }
-  function resetConfig() {
-    // 重置为默认值并通知渲染进程刷新
-    if (window.configPanelApi) window.configPanelApi.resetConfig?.()
+  async function resetConfig() {
+    // 调用主进程重置配置为默认值，然后重新加载到草稿中
+    if (window.configPanelApi) {
+      await window.configPanelApi.resetConfig()
+      const cfg = await window.configPanelApi.getConfig()
+      if (cfg) Object.assign(draft, JSON.parse(JSON.stringify(cfg)))
+    }
   }
   function showInExplorer() {
     if (window.configPanelApi) window.configPanelApi.openConfigDir?.()

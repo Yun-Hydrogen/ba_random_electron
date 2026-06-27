@@ -5,8 +5,8 @@ var __commonJSMin = (cb, mod) => () => (mod || cb((mod = { exports: {} }).export
 var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { app: app$3 } = require("electron");
 	var { execFileSync, spawnSync } = require("child_process");
-	var fs$3 = require("fs");
-	var path$4 = require("path");
+	var fs$2 = require("fs");
+	var path$3 = require("path");
 	var IS_WINDOWS = process.platform === "win32";
 	var ADMIN_TASK_DEFAULT_NAME = "Blue Random (Admin)";
 	var USERDATA_DIR_NAME = "BlueRandom";
@@ -15,8 +15,8 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function configureUserDataPath() {
 		if (!IS_WINDOWS) return;
 		const appData = app$3.getPath("appData");
-		const localRoot = path$4.resolve(appData, "..", "Local");
-		const targetPath = path$4.join(localRoot, USERDATA_DIR_NAME);
+		const localRoot = path$3.resolve(appData, "..", "Local");
+		const targetPath = path$3.join(localRoot, USERDATA_DIR_NAME);
 		app$3.setPath("userData", targetPath);
 	}
 	function quoteForPowerShell(text) {
@@ -25,14 +25,14 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function getPowerShellPath() {
 		if (!IS_WINDOWS) return "powershell";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
-		const psPath = path$4.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-		return fs$3.existsSync(psPath) ? psPath : "powershell";
+		const psPath = path$3.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+		return fs$2.existsSync(psPath) ? psPath : "powershell";
 	}
 	function getRundll32Path() {
 		if (!IS_WINDOWS) return "rundll32.exe";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
-		const dllPath = path$4.join(root, "System32", "rundll32.exe");
-		return fs$3.existsSync(dllPath) ? dllPath : "rundll32.exe";
+		const dllPath = path$3.join(root, "System32", "rundll32.exe");
+		return fs$2.existsSync(dllPath) ? dllPath : "rundll32.exe";
 	}
 	function isProcessElevated() {
 		if (!IS_WINDOWS) return false;
@@ -86,8 +86,8 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		return app$3.getPath("exe");
 	}
 	function getDefaultUiAccessDllPath() {
-		const exeDir = path$4.dirname(getDefaultExePath());
-		return path$4.join(exeDir, "uiaccess.dll");
+		const exeDir = path$3.dirname(getDefaultExePath());
+		return path$3.join(exeDir, "uiaccess.dll");
 	}
 	function buildUiAccessCommandLine(exePath, args) {
 		const quote = (value) => `"${String(value).replace(/"/g, "\\\"")}"`;
@@ -103,12 +103,12 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			ok: false,
 			message: "UIAccess 仅支持正式版运行。"
 		};
-		if (!uiAccessDllPath || !fs$3.existsSync(uiAccessDllPath)) return {
+		if (!uiAccessDllPath || !fs$2.existsSync(uiAccessDllPath)) return {
 			ok: false,
 			message: "未找到 uiaccess.dll，请检查路径。"
 		};
 		const exePath = getDefaultExePath();
-		const exeDir = path$4.dirname(exePath);
+		const exeDir = path$3.dirname(exePath);
 		const baseArgs = process.argv.slice(1);
 		const cmdLine = buildUiAccessCommandLine(exePath, baseArgs.includes(UIACCESS_ARG) ? baseArgs : [...baseArgs, UIACCESS_ARG]);
 		const entry = `${uiAccessDllPath},run`;
@@ -156,7 +156,7 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			ok: false,
 			message: "仅支持 Windows 计划任务。"
 		};
-		if (!exePath || !fs$3.existsSync(exePath)) return {
+		if (!exePath || !fs$2.existsSync(exePath)) return {
 			ok: false,
 			message: "可执行文件路径无效或不存在。"
 		};
@@ -2358,8 +2358,8 @@ var require_js_yaml = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region src/main/config.js
 var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { app: app$2, shell } = require("electron");
-	var fs$2 = require("fs");
-	var path$3 = require("path");
+	var fs$1 = require("fs");
+	var path$2 = require("path");
 	var yaml = require_js_yaml();
 	var admin = require_admin();
 	var DEFAULT_CONFIG = {
@@ -2368,29 +2368,28 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		agreedEula: false,
 		floatingButton: {
 			sizePercent: 100,
-			transparencyPercent: 20,
 			alwaysOnTop: true,
 			position: {
 				x: null,
 				y: null
-			}
+			},
+			iconPath: "",
+			iconSize: 48,
+			borderColor: "#ffffff"
 		},
-		pickCountDialog: {
-			defaultPlayMusic: false,
-			backgroundDarknessPercent: 50,
-			defaultCount: 1
-		},
+		pickCountDialog: { defaultCount: 1 },
 		pickResultDialog: {
 			defaultPlayGachaSound: true,
-			gachaSoundVolume: .6,
+			soundVolume: 80,
+			playMusic: false,
+			musicVolume: 60,
 			panelOpacity: .9,
 			panelBgColor: "#ffffff",
 			panelBorderColor: "#66ccff"
 		},
 		webConfig: {
-			port: 21219,
 			adminTopmostEnabled: false,
-			adminAutoStartEnabled: false,
+			adminAutoStartAdmin: true,
 			adminAutoStartPath: "",
 			adminAutoStartTaskName: admin.ADMIN_TASK_DEFAULT_NAME,
 			uiAccessEnabled: false
@@ -2415,43 +2414,45 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			};
 			return null;
 		}).filter((s) => s && s.name);
-		const fb = source.floatingButton && typeof source.floatingButton === "object" ? source.floatingButton : {};
 		const allowRepeatDraw = typeof source.allowRepeatDraw === "boolean" ? source.allowRepeatDraw : DEFAULT_CONFIG.allowRepeatDraw;
 		const agreedEula = typeof source.agreedEula === "boolean" ? source.agreedEula : DEFAULT_CONFIG.agreedEula;
-		const position = fb.position && typeof fb.position === "object" ? fb.position : {};
-		const pick = source.pickCountDialog && typeof source.pickCountDialog === "object" ? source.pickCountDialog : {};
-		const pickResult = source.pickResultDialog && typeof source.pickResultDialog === "object" ? source.pickResultDialog : {};
-		const web = source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
+		const fb = source.floatingButton && typeof source.floatingButton === "object" ? source.floatingButton : {};
+		const fbPos = fb.position && typeof fb.position === "object" ? fb.position : {};
 		const alwaysOnTop = typeof fb.alwaysOnTop === "boolean" ? fb.alwaysOnTop : DEFAULT_CONFIG.floatingButton.alwaysOnTop;
+		const floatingButton = {
+			sizePercent: clampNumber(fb.sizePercent, 50, 200, DEFAULT_CONFIG.floatingButton.sizePercent),
+			alwaysOnTop,
+			position: {
+				x: Number.isFinite(Number(fbPos.x)) ? Math.round(Number(fbPos.x)) : null,
+				y: Number.isFinite(Number(fbPos.y)) ? Math.round(Number(fbPos.y)) : null
+			},
+			iconPath: typeof fb.iconPath === "string" ? fb.iconPath : DEFAULT_CONFIG.floatingButton.iconPath,
+			iconSize: clampNumber(fb.iconSize, 16, 128, DEFAULT_CONFIG.floatingButton.iconSize),
+			borderColor: typeof fb.borderColor === "string" && fb.borderColor ? fb.borderColor : DEFAULT_CONFIG.floatingButton.borderColor
+		};
+		const pick = source.pickCountDialog && typeof source.pickCountDialog === "object" ? source.pickCountDialog : {};
+		const pickCountDialog = { defaultCount: Math.round(clampNumber(pick.defaultCount, 1, 10, DEFAULT_CONFIG.pickCountDialog.defaultCount)) };
+		const pickResult = source.pickResultDialog && typeof source.pickResultDialog === "object" ? source.pickResultDialog : {};
+		const pickResultDialog = {
+			defaultPlayGachaSound: typeof pickResult.defaultPlayGachaSound === "boolean" ? pickResult.defaultPlayGachaSound : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
+			soundVolume: clampNumber(pickResult.soundVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.soundVolume),
+			playMusic: typeof pickResult.playMusic === "boolean" ? pickResult.playMusic : DEFAULT_CONFIG.pickResultDialog.playMusic,
+			musicVolume: clampNumber(pickResult.musicVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.musicVolume),
+			panelOpacity: clampNumber(pickResult.panelOpacity, .1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
+			panelBgColor: typeof pickResult.panelBgColor === "string" && pickResult.panelBgColor ? pickResult.panelBgColor : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
+			panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
+		};
+		const web = source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
 		return {
 			studentList: students,
 			allowRepeatDraw,
 			agreedEula,
-			floatingButton: {
-				sizePercent: clampNumber(fb.sizePercent, 0, 1e3, DEFAULT_CONFIG.floatingButton.sizePercent),
-				transparencyPercent: clampNumber(fb.transparencyPercent, 0, 100, DEFAULT_CONFIG.floatingButton.transparencyPercent),
-				alwaysOnTop,
-				position: {
-					x: Number.isFinite(Number(position.x)) ? Math.round(Number(position.x)) : null,
-					y: Number.isFinite(Number(position.y)) ? Math.round(Number(position.y)) : null
-				}
-			},
-			pickCountDialog: {
-				defaultPlayMusic: typeof pick.defaultPlayMusic === "boolean" ? pick.defaultPlayMusic : DEFAULT_CONFIG.pickCountDialog.defaultPlayMusic,
-				backgroundDarknessPercent: clampNumber(pick.backgroundDarknessPercent, 0, 100, DEFAULT_CONFIG.pickCountDialog.backgroundDarknessPercent),
-				defaultCount: Math.round(clampNumber(pick.defaultCount, 1, 10, DEFAULT_CONFIG.pickCountDialog.defaultCount))
-			},
-			pickResultDialog: {
-				defaultPlayGachaSound: typeof pickResult.defaultPlayGachaSound === "boolean" ? pickResult.defaultPlayGachaSound : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
-				gachaSoundVolume: clampNumber(pickResult.gachaSoundVolume, 0, 1, DEFAULT_CONFIG.pickResultDialog.gachaSoundVolume),
-				panelOpacity: clampNumber(pickResult.panelOpacity, .1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
-				panelBgColor: typeof pickResult.panelBgColor === "string" && pickResult.panelBgColor ? pickResult.panelBgColor : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
-				panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
-			},
+			floatingButton,
+			pickCountDialog,
+			pickResultDialog,
 			webConfig: {
-				port: Math.round(clampNumber(web.port, 1, 65535, DEFAULT_CONFIG.webConfig.port)),
 				adminTopmostEnabled: typeof web.adminTopmostEnabled === "boolean" ? web.adminTopmostEnabled : DEFAULT_CONFIG.webConfig.adminTopmostEnabled,
-				adminAutoStartEnabled: typeof web.adminAutoStartEnabled === "boolean" ? web.adminAutoStartEnabled : DEFAULT_CONFIG.webConfig.adminAutoStartEnabled,
+				adminAutoStartAdmin: typeof web.adminAutoStartAdmin === "boolean" ? web.adminAutoStartAdmin : DEFAULT_CONFIG.webConfig.adminAutoStartAdmin,
 				adminAutoStartPath: typeof web.adminAutoStartPath === "string" ? web.adminAutoStartPath : DEFAULT_CONFIG.webConfig.adminAutoStartPath,
 				adminAutoStartTaskName: typeof web.adminAutoStartTaskName === "string" && web.adminAutoStartTaskName.trim() ? web.adminAutoStartTaskName.trim() : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName,
 				uiAccessEnabled: typeof web.uiAccessEnabled === "boolean" ? web.uiAccessEnabled : DEFAULT_CONFIG.webConfig.uiAccessEnabled
@@ -2459,23 +2460,23 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 	}
 	function getConfigPath() {
-		return path$3.join(app$2.getPath("userData"), "config.yml");
+		return path$2.join(app$2.getPath("userData"), "config.yml");
 	}
 	function getLegacyConfigPaths() {
 		const legacyPaths = [];
-		const exeDir = path$3.dirname(app$2.getPath("exe"));
-		legacyPaths.push(path$3.join(exeDir, "config.yml"));
-		if (!app$2.isPackaged) legacyPaths.push(path$3.join(process.cwd(), "config.yml"));
+		const exeDir = path$2.dirname(app$2.getPath("exe"));
+		legacyPaths.push(path$2.join(exeDir, "config.yml"));
+		if (!app$2.isPackaged) legacyPaths.push(path$2.join(process.cwd(), "config.yml"));
 		if (admin.IS_WINDOWS) {
 			const appData = app$2.getPath("appData");
-			const localRoot = path$3.resolve(appData, "..", "Local");
-			legacyPaths.push(path$3.join(localRoot, "Blue Random", "config.yml"));
+			const localRoot = path$2.resolve(appData, "..", "Local");
+			legacyPaths.push(path$2.join(localRoot, "Blue Random", "config.yml"));
 		}
 		const currentPath = getConfigPath();
 		return Array.from(new Set(legacyPaths.filter((p) => p && p !== currentPath)));
 	}
 	function getConfigDir() {
-		return path$3.dirname(getConfigPath());
+		return path$2.dirname(getConfigPath());
 	}
 	async function openConfigFile() {
 		const configPath = getConfigPath();
@@ -2492,7 +2493,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}
 	async function openConfigDir() {
 		const configDir = getConfigDir();
-		fs$2.mkdirSync(configDir, { recursive: true });
+		fs$1.mkdirSync(configDir, { recursive: true });
 		const result = await shell.openPath(configDir);
 		if (result) return {
 			ok: false,
@@ -2503,10 +2504,6 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			message: "已打开配置目录。"
 		};
 	}
-	function openConfigPageInBrowser() {
-		const url = `http://localhost:${refreshConfig().webConfig.port}/#/config`;
-		shell.openExternal(url);
-	}
 	function toConfigYamlWithComments(config) {
 		const fb = config.floatingButton;
 		const pick = config.pickCountDialog;
@@ -2516,53 +2513,67 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const posY = Number.isFinite(Number(fb.position.y)) ? String(Math.round(Number(fb.position.y))) : "null";
 		const yamlSingleQuote = (value) => `'${String(value || "").replace(/'/g, "''")}'`;
 		return [
-			"# 抽取名单列表",
+			"# ============================================================",
+			"#  蔚蓝点名 配置文件",
+			"#  通过配置面板（托盘 → 配置）修改后自动保存",
+			"#  也可手动编辑此文件，保存后重启应用生效",
+			"# ============================================================",
+			"",
+			"# ---- 抽取名单 ----",
 			`studentList:${Array.isArray(config.studentList) && config.studentList.length > 0 ? "\n" + config.studentList.map((s) => `  - name: "${s.name}"\n    weight: ${s.weight}`).join("\n") : " []"}`,
 			`allowRepeatDraw: ${config.allowRepeatDraw ? "true" : "false"}`,
 			`agreedEula: ${config.agreedEula ? "true" : "false"}`,
 			"",
-			"# 悬浮按钮配置",
+			"# ---- 悬浮按钮 ----",
 			"floatingButton:",
-			"  # 按钮大小百分比（基准 50px*50px），范围 0-1000，默认 100",
+			"  # 按钮大小百分比（50-200），默认 100",
 			`  sizePercent: ${fb.sizePercent}`,
-			"  # 透明度百分比，范围 0-100（0=完全不透明，100=完全透明），默认 20",
-			`  transparencyPercent: ${fb.transparencyPercent}`,
-			"  # 是否置顶（true/false），默认 true",
+			"  # 是否始终置顶（true/false），默认 true",
 			`  alwaysOnTop: ${fb.alwaysOnTop ? "true" : "false"}`,
-			"  # 悬浮按钮窗口位置（左上角屏幕坐标），退出时自动保存；null 表示使用系统默认位置",
+			"  # 窗口位置（屏幕坐标），退出时自动保存；null 为系统默认",
 			"  position:",
 			`    x: ${posX}`,
 			`    y: ${posY}`,
+			"  # 自定义图标路径（本地绝对路径），空字符串为内置默认图标",
+			`  iconPath: ${yamlSingleQuote(fb.iconPath || "")}`,
+			"  # 图标尺寸（px），范围 16-128，默认 48",
+			`  iconSize: ${fb.iconSize}`,
+			"  # 按钮边框颜色（hex），默认 #ffffff",
+			`  borderColor: ${yamlSingleQuote(fb.borderColor || "#ffffff")}`,
 			"",
-			"# 人数选择窗口配置",
+			"# ---- 人数选择 ----",
 			"pickCountDialog:",
-			"  # 是否默认播放喜庆点名音乐（true/false），默认 false",
-			`  defaultPlayMusic: ${pick.defaultPlayMusic ? "true" : "false"}`,
-			"  # 背景变暗程度，范围 0-100（100 接近全黑），默认 50",
-			`  backgroundDarknessPercent: ${pick.backgroundDarknessPercent}`,
-			"  # 人数默认值，范围 1-10 的整数，默认 1",
+			"  # 默认抽取人数（1-10），默认 1",
 			`  defaultCount: ${pick.defaultCount}`,
 			"",
-			"# 抽奖结果动画音效配置",
+			"# ---- 抽奖结果弹窗 ----",
 			"pickResultDialog:",
-			"  # 是否默认播放抽奖音效（true/false），默认 true",
+			"  # 是否播放抽卡音效（true/false），默认 true",
 			`  defaultPlayGachaSound: ${pickResult.defaultPlayGachaSound ? "true" : "false"}`,
-			"  # 抽奖音效音量（0.0-1.0），默认 0.6",
-			`  gachaSoundVolume: ${pickResult.gachaSoundVolume}`,
+			"  # 音效音量（0-100），默认 80",
+			`  soundVolume: ${pickResult.soundVolume}`,
+			"  # 是否播放抽卡背景音乐（true/false），默认 false",
+			`  playMusic: ${pickResult.playMusic ? "true" : "false"}`,
+			"  # 音乐音量（0-100），默认 60",
+			`  musicVolume: ${pickResult.musicVolume}`,
+			"  # 面板不透明度（0.1-1.0），默认 0.9",
+			`  panelOpacity: ${pickResult.panelOpacity}`,
+			"  # 面板背景颜色（hex），默认 #ffffff",
+			`  panelBgColor: ${yamlSingleQuote(pickResult.panelBgColor || "#ffffff")}`,
+			"  # 面板边框颜色（hex），默认 #66ccff",
+			`  panelBorderColor: ${yamlSingleQuote(pickResult.panelBorderColor || "#66ccff")}`,
 			"",
-			"# 网页配置服务",
+			"# ---- 高级设置 ----",
 			"webConfig:",
-			"  # 配置网页端口（默认 21219）",
-			`  port: ${web.port}`,
 			"  # 启用管理员置顶增强（Windows 下会尝试管理员权限）",
 			`  adminTopmostEnabled: ${web.adminTopmostEnabled ? "true" : "false"}`,
-			"  # 是否创建开机计划任务（管理员权限运行）",
-			`  adminAutoStartEnabled: ${web.adminAutoStartEnabled ? "true" : "false"}`,
-			"  # 计划任务运行的可执行文件路径",
+			"  # 开机计划任务是否以管理员身份运行",
+			`  adminAutoStartAdmin: ${web.adminAutoStartAdmin ? "true" : "false"}`,
+			"  # 计划任务的可执行文件路径（留空则自动检测）",
 			`  adminAutoStartPath: ${yamlSingleQuote(web.adminAutoStartPath)}`,
-			"  # 计划任务名称",
+			"  # 计划任务在任务计划程序中的显示名称",
 			`  adminAutoStartTaskName: ${yamlSingleQuote(web.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
-			"  # 管理员身份运行时自动使用 UIAccess（需要 uiaccess.dll 随包分发）",
+			"  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）",
 			`  uiAccessEnabled: ${web.uiAccessEnabled ? "true" : "false"}`,
 			""
 		].join("\n");
@@ -2570,14 +2581,14 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function saveConfig(config) {
 		const configPath = getConfigPath();
 		const yamlText = toConfigYamlWithComments(config);
-		fs$2.mkdirSync(path$3.dirname(configPath), { recursive: true });
-		fs$2.writeFileSync(configPath, yamlText, "utf8");
+		fs$1.mkdirSync(path$2.dirname(configPath), { recursive: true });
+		fs$1.writeFileSync(configPath, yamlText, "utf8");
 	}
 	function writeDefaultConfigIfMissing(configPath) {
-		if (fs$2.existsSync(configPath)) return;
-		for (const legacyPath of getLegacyConfigPaths()) if (fs$2.existsSync(legacyPath)) {
-			fs$2.mkdirSync(path$3.dirname(configPath), { recursive: true });
-			fs$2.copyFileSync(legacyPath, configPath);
+		if (fs$1.existsSync(configPath)) return;
+		for (const legacyPath of getLegacyConfigPaths()) if (fs$1.existsSync(legacyPath)) {
+			fs$1.mkdirSync(path$2.dirname(configPath), { recursive: true });
+			fs$1.copyFileSync(legacyPath, configPath);
 			return;
 		}
 		saveConfig(DEFAULT_CONFIG);
@@ -2586,7 +2597,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const configPath = getConfigPath();
 		writeDefaultConfigIfMissing(configPath);
 		try {
-			const raw = fs$2.readFileSync(configPath, "utf8");
+			const raw = fs$1.readFileSync(configPath, "utf8");
 			const normalized = normalizeConfig(yaml.load(raw));
 			saveConfig(normalized);
 			return normalized;
@@ -2610,254 +2621,10 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		normalizeConfig,
 		openConfigDir,
 		openConfigFile,
-		openConfigPageInBrowser,
 		refreshConfig,
 		saveConfig,
 		writeDefaultConfigIfMissing
 	};
-}));
-//#endregion
-//#region src/main/config-server.js
-var require_config_server = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var http = require("http");
-	var fs$1 = require("fs");
-	var path$2 = require("path");
-	var configServer = null;
-	var configServerPort = null;
-	var serverDeps = null;
-	var configEventClients = /* @__PURE__ */ new Set();
-	function broadcastConfigRefresh(reason = "refresh") {
-		const payload = {
-			type: "config-refresh",
-			reason,
-			time: (/* @__PURE__ */ new Date()).toISOString()
-		};
-		const message = `data: ${JSON.stringify(payload)}\n\n`;
-		for (const res of configEventClients) res.write(message);
-	}
-	function handleConfigEventStream(req, res) {
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream; charset=utf-8",
-			"Cache-Control": "no-cache",
-			"Connection": "keep-alive",
-			"X-Accel-Buffering": "no"
-		});
-		res.write("\n");
-		configEventClients.add(res);
-		broadcastConfigRefresh("connect");
-		req.on("close", () => {
-			configEventClients.delete(res);
-		});
-	}
-	function getMimeType(filePath) {
-		if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
-		if (filePath.endsWith(".js")) return "application/javascript; charset=utf-8";
-		if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
-		if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
-		return "text/plain; charset=utf-8";
-	}
-	function sendJson(res, statusCode, payload) {
-		res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
-		res.end(JSON.stringify(payload));
-	}
-	function parseRequestJsonBody(req) {
-		return new Promise((resolve, reject) => {
-			let body = "";
-			req.on("data", (chunk) => {
-				body += chunk;
-				if (body.length > 1024 * 1024) reject(/* @__PURE__ */ new Error("Payload too large"));
-			});
-			req.on("end", () => {
-				if (!body.trim()) {
-					resolve({});
-					return;
-				}
-				try {
-					resolve(JSON.parse(body));
-				} catch (error) {
-					reject(error);
-				}
-			});
-			req.on("error", reject);
-		});
-	}
-	function createConfigServerRequestHandler() {
-		const { app, isDebugMode, config, update, logging, windows, admin } = serverDeps;
-		return async (req, res) => {
-			const requestUrl = req.url || "/";
-			if (req.method === "GET" && requestUrl === "/api/config") return sendJson(res, 200, config.refreshConfig());
-			if (req.method === "GET" && requestUrl === "/api/app-info") {
-				const uiAccessDefaultPath = admin.getDefaultUiAccessDllPath();
-				return sendJson(res, 200, {
-					version: app.getVersion(),
-					isDebugMode,
-					isAdmin: admin.isProcessElevated(),
-					exePath: admin.getDefaultExePath(),
-					uiAccessDllExists: fs$1.existsSync(uiAccessDefaultPath),
-					isUiAccess: process.argv.includes(admin.UIACCESS_ARG),
-					configPath: config.getConfigPath(),
-					configDir: config.getConfigDir()
-				});
-			}
-			if (req.method === "POST" && requestUrl === "/api/config/open-file") try {
-				const result = await config.openConfigFile();
-				if (!result.ok) return sendJson(res, 400, result);
-				return sendJson(res, 200, result);
-			} catch (error) {
-				return sendJson(res, 500, {
-					ok: false,
-					message: String(error)
-				});
-			}
-			if (req.method === "POST" && requestUrl === "/api/config/open-dir") try {
-				const result = await config.openConfigDir();
-				if (!result.ok) return sendJson(res, 400, result);
-				return sendJson(res, 200, result);
-			} catch (error) {
-				return sendJson(res, 500, {
-					ok: false,
-					message: String(error)
-				});
-			}
-			if (req.method === "GET" && requestUrl === "/api/check-update") try {
-				return sendJson(res, 200, await update.checkUpdateFromMain());
-			} catch (error) {
-				console.error("Update check failed:", error);
-				return sendJson(res, 500, {
-					ok: false,
-					status: "error",
-					title: "检查更新失败",
-					detail: "请检查网络或稍后再试。"
-				});
-			}
-			if (req.method === "GET" && requestUrl === "/api/logs") {
-				logging.handleLogStream(req, res);
-				return;
-			}
-			if (req.method === "GET" && requestUrl === "/api/config-events") {
-				handleConfigEventStream(req, res);
-				return;
-			}
-			if (req.method === "POST" && requestUrl === "/api/config") try {
-				const payload = await parseRequestJsonBody(req);
-				const normalized = config.normalizeConfig(payload);
-				config.saveConfig(normalized);
-				startConfigServer();
-				windows.refreshFloatingButtonWindow();
-				broadcastConfigRefresh("save");
-				return sendJson(res, 200, {
-					ok: true,
-					message: "配置保存成功，悬浮窗已自动刷新配置",
-					restartRequired: false
-				});
-			} catch (error) {
-				return sendJson(res, 400, {
-					ok: false,
-					message: "配置保存失败，请检查输入格式"
-				});
-			}
-			if (req.method === "POST" && requestUrl === "/api/restart") {
-				sendJson(res, 200, { ok: true });
-				setTimeout(() => {
-					windows.setQuitting(true);
-					app.relaunch();
-					app.exit(0);
-				}, 80);
-				return;
-			}
-			if (req.method === "POST" && requestUrl === "/api/admin/elevate") {
-				if (!admin.IS_WINDOWS) return sendJson(res, 400, {
-					ok: false,
-					message: "当前系统不支持管理员提升。"
-				});
-				if (admin.isProcessElevated()) return sendJson(res, 200, {
-					ok: true,
-					message: "已在管理员权限下运行。"
-				});
-				const result = admin.requestAdminRelaunch();
-				if (!result.ok) return sendJson(res, 400, result);
-				sendJson(res, 200, result);
-				setTimeout(() => {
-					windows.setQuitting(true);
-					app.exit(0);
-				}, 150);
-				return;
-			}
-			if (req.method === "POST" && requestUrl === "/api/task/create-admin-startup") try {
-				const payload = await parseRequestJsonBody(req);
-				const exePath = payload && typeof payload.exePath === "string" ? payload.exePath.trim() : "";
-				const taskName = payload && typeof payload.taskName === "string" ? payload.taskName.trim() : admin.ADMIN_TASK_DEFAULT_NAME;
-				const result = admin.createAdminStartupTask({
-					taskName,
-					exePath
-				});
-				if (!result.ok) return sendJson(res, 400, result);
-				const baseConfig = config.refreshConfig();
-				const updated = config.normalizeConfig({
-					...baseConfig,
-					webConfig: {
-						...baseConfig.webConfig,
-						adminAutoStartEnabled: true,
-						adminAutoStartPath: exePath,
-						adminAutoStartTaskName: taskName
-					}
-				});
-				config.saveConfig(updated);
-				return sendJson(res, 200, result);
-			} catch (error) {
-				return sendJson(res, 400, {
-					ok: false,
-					message: "创建计划任务失败。"
-				});
-			}
-			const urlPath = requestUrl.split("?")[0].split("#")[0];
-			if (!urlPath.startsWith("/api")) {
-				if (process.env.VITE_DEV_SERVER_URL) {
-					res.writeHead(302, { Location: process.env.VITE_DEV_SERVER_URL + "#/config" });
-					res.end();
-					return;
-				}
-				const distDir = path$2.join(__dirname, "../dist");
-				const targetPath = path$2.join(distDir, urlPath === "/" ? "index.html" : urlPath);
-				if (!targetPath.startsWith(distDir)) return sendJson(res, 403, {
-					ok: false,
-					message: "Forbidden"
-				});
-				if (fs$1.existsSync(targetPath) && fs$1.statSync(targetPath).isFile()) {
-					const fileContent = fs$1.readFileSync(targetPath);
-					res.writeHead(200, { "Content-Type": getMimeType(targetPath) });
-					res.end(fileContent);
-					return;
-				}
-			}
-			sendJson(res, 404, {
-				ok: false,
-				message: "Not Found"
-			});
-		};
-	}
-	function startConfigServer(deps) {
-		if (deps) serverDeps = deps;
-		const { config } = serverDeps;
-		const desiredPort = config.refreshConfig().webConfig.port;
-		if (configServer && configServerPort === desiredPort) return;
-		if (configServer) {
-			configServer.close();
-			configServer = null;
-			configServerPort = null;
-		}
-		const server = http.createServer(createConfigServerRequestHandler());
-		server.listen(desiredPort, "127.0.0.1", () => {
-			configServerPort = desiredPort;
-			console.log(`Config web server running at http://localhost:${desiredPort}`);
-			broadcastConfigRefresh("startup");
-		});
-		server.on("error", (error) => {
-			console.error("Failed to start config web server:", error);
-		});
-		configServer = server;
-	}
-	module.exports = { startConfigServer };
 }));
 //#endregion
 //#region src/main/windows.js
@@ -3563,6 +3330,7 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		ipcMain$1.handle("config-panel:save-config", (_event, payload) => {
 			const normalized = config.normalizeConfig(payload);
 			config.saveConfig(normalized);
+			windows.refreshFloatingButtonWindow();
 			return { ok: true };
 		});
 		ipcMain$1.on("config-panel:close", (_event, payload) => {
@@ -3628,6 +3396,11 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			});
 			if (result.canceled || result.filePaths.length === 0) return null;
 			return result.filePaths[0];
+		});
+		ipcMain$1.handle("config-panel:reset-config", () => {
+			config.saveConfig(config.normalizeConfig({}));
+			windows.refreshFloatingButtonWindow();
+			return { ok: true };
 		});
 	}
 }));
@@ -3750,7 +3523,6 @@ if (process.platform === "win32") try {
 } catch {}
 var admin = require_admin();
 var config = require_config();
-var configServer = require_config_server();
 var ipc = require_ipc();
 var logging = require_logging();
 var tray = require_tray();
@@ -3793,15 +3565,6 @@ app.whenReady().then(() => {
 			return;
 		}
 	}
-	configServer.startConfigServer({
-		app,
-		isDebugMode,
-		config,
-		update,
-		logging,
-		windows,
-		admin
-	});
 	tray.createTray({
 		onOpenConfig: () => windows.openConfigPanelWindow(),
 		onQuit: () => app.quit()

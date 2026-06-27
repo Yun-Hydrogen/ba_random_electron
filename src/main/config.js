@@ -18,35 +18,37 @@ const yaml = require('js-yaml');
 const admin = require('./admin');
 
 // 默认配置结构
+// 与 Vue 配置面板 draft 结构保持严格一致，新增字段需两边同步
 const DEFAULT_CONFIG = {
   studentList: [],
   allowRepeatDraw: true,
   agreedEula: false,
   floatingButton: {
     sizePercent: 100,
-    transparencyPercent: 20,
     alwaysOnTop: true,
     position: {
       x: null,
       y: null
-    }
+    },
+    iconPath: '',
+    iconSize: 48,
+    borderColor: '#ffffff'
   },
   pickCountDialog: {
-    defaultPlayMusic: false,
-    backgroundDarknessPercent: 50,
     defaultCount: 1
   },
   pickResultDialog: {
     defaultPlayGachaSound: true,
-    gachaSoundVolume: 0.6,
+    soundVolume: 80,
+    playMusic: false,
+    musicVolume: 60,
     panelOpacity: 0.9,
     panelBgColor: '#ffffff',
     panelBorderColor: '#66ccff'
   },
   webConfig: {
-    port: 21219,
     adminTopmostEnabled: false,
-    adminAutoStartEnabled: false,
+    adminAutoStartAdmin: true,
     adminAutoStartPath: '',
     adminAutoStartTaskName: admin.ADMIN_TASK_DEFAULT_NAME,
     uiAccessEnabled: false
@@ -62,116 +64,114 @@ function clampNumber(value, min, max, fallback) {
 }
 
 // 归一化配置，确保字段合法且有默认值
+// 前端 Vue 面板通过 IPC 传入的 JSON 对象由此函数清洗后落盘
 function normalizeConfig(input) {
   const source = input && typeof input === 'object' ? input : {};
+
+  // ---- studentList ----
   const rawStudents = Array.isArray(source.studentList) ? source.studentList : [];
   const students = rawStudents.map(s => {
     if (typeof s === 'string') return { name: s.trim(), weight: 1.0 };
     if (s && typeof s === 'object') return { name: String(s.name || '').trim(), weight: Number.isFinite(Number(s.weight)) ? Number(s.weight) : 1.0 };
     return null;
   }).filter(s => s && s.name);
-  const fb = source.floatingButton && typeof source.floatingButton === 'object' ? source.floatingButton : {};
+
+  // ---- allowRepeatDraw / agreedEula ----
   const allowRepeatDraw =
     typeof source.allowRepeatDraw === 'boolean' ? source.allowRepeatDraw : DEFAULT_CONFIG.allowRepeatDraw;
   const agreedEula = typeof source.agreedEula === 'boolean' ? source.agreedEula : DEFAULT_CONFIG.agreedEula;
-  const position = fb.position && typeof fb.position === 'object' ? fb.position : {};
-  const pick = source.pickCountDialog && typeof source.pickCountDialog === 'object' ? source.pickCountDialog : {};
-  const pickResult = source.pickResultDialog && typeof source.pickResultDialog === 'object' ? source.pickResultDialog : {};
-  const web = source.webConfig && typeof source.webConfig === 'object' ? source.webConfig : {};
 
+  // ---- floatingButton ----
+  const fb = source.floatingButton && typeof source.floatingButton === 'object' ? source.floatingButton : {};
+  const fbPos = fb.position && typeof fb.position === 'object' ? fb.position : {};
   const alwaysOnTop =
     typeof fb.alwaysOnTop === 'boolean' ? fb.alwaysOnTop : DEFAULT_CONFIG.floatingButton.alwaysOnTop;
+
+  const floatingButton = {
+    sizePercent: clampNumber(fb.sizePercent, 50, 200, DEFAULT_CONFIG.floatingButton.sizePercent),
+    alwaysOnTop,
+    position: {
+      x: Number.isFinite(Number(fbPos.x)) ? Math.round(Number(fbPos.x)) : null,
+      y: Number.isFinite(Number(fbPos.y)) ? Math.round(Number(fbPos.y)) : null
+    },
+    /* 图标文件路径（本地绝对路径），默认为空表示使用内置图标 */
+    iconPath: typeof fb.iconPath === 'string' ? fb.iconPath : DEFAULT_CONFIG.floatingButton.iconPath,
+    /* 图标尺寸（px），范围 16-128 */
+    iconSize: clampNumber(fb.iconSize, 16, 128, DEFAULT_CONFIG.floatingButton.iconSize),
+    /* 按钮边框颜色（hex 字符串），默认白色 */
+    borderColor: typeof fb.borderColor === 'string' && fb.borderColor
+      ? fb.borderColor
+      : DEFAULT_CONFIG.floatingButton.borderColor
+  };
+
+  // ---- pickCountDialog ----
+  const pick = source.pickCountDialog && typeof source.pickCountDialog === 'object' ? source.pickCountDialog : {};
+  const pickCountDialog = {
+    defaultCount: Math.round(clampNumber(pick.defaultCount, 1, 10, DEFAULT_CONFIG.pickCountDialog.defaultCount))
+  };
+
+  // ---- pickResultDialog ----
+  const pickResult = source.pickResultDialog && typeof source.pickResultDialog === 'object' ? source.pickResultDialog : {};
+  const pickResultDialog = {
+    defaultPlayGachaSound:
+      typeof pickResult.defaultPlayGachaSound === 'boolean'
+        ? pickResult.defaultPlayGachaSound
+        : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
+    /* 音效音量（0-100），前端滑条百分比 */
+    soundVolume: clampNumber(pickResult.soundVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.soundVolume),
+    /* 是否播放抽卡背景音乐 */
+    playMusic:
+      typeof pickResult.playMusic === 'boolean'
+        ? pickResult.playMusic
+        : DEFAULT_CONFIG.pickResultDialog.playMusic,
+    /* 音乐音量（0-100），前端滑条百分比 */
+    musicVolume: clampNumber(pickResult.musicVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.musicVolume),
+    /* 面板不透明度（0.1-1.0） */
+    panelOpacity: clampNumber(pickResult.panelOpacity, 0.1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
+    panelBgColor:
+      typeof pickResult.panelBgColor === 'string' && pickResult.panelBgColor
+        ? pickResult.panelBgColor
+        : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
+    panelBorderColor:
+      typeof pickResult.panelBorderColor === 'string' && pickResult.panelBorderColor
+        ? pickResult.panelBorderColor
+        : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
+  };
+
+  // ---- webConfig ----
+  const web = source.webConfig && typeof source.webConfig === 'object' ? source.webConfig : {};
+  const webConfig = {
+    adminTopmostEnabled:
+      typeof web.adminTopmostEnabled === 'boolean'
+        ? web.adminTopmostEnabled
+        : DEFAULT_CONFIG.webConfig.adminTopmostEnabled,
+    /* 开机自启时是否以管理员身份运行计划任务 */
+    adminAutoStartAdmin:
+      typeof web.adminAutoStartAdmin === 'boolean'
+        ? web.adminAutoStartAdmin
+        : DEFAULT_CONFIG.webConfig.adminAutoStartAdmin,
+    adminAutoStartPath:
+      typeof web.adminAutoStartPath === 'string'
+        ? web.adminAutoStartPath
+        : DEFAULT_CONFIG.webConfig.adminAutoStartPath,
+    adminAutoStartTaskName:
+      typeof web.adminAutoStartTaskName === 'string' && web.adminAutoStartTaskName.trim()
+        ? web.adminAutoStartTaskName.trim()
+        : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName,
+    uiAccessEnabled:
+      typeof web.uiAccessEnabled === 'boolean'
+        ? web.uiAccessEnabled
+        : DEFAULT_CONFIG.webConfig.uiAccessEnabled
+  };
 
   return {
     studentList: students,
     allowRepeatDraw,
     agreedEula,
-    floatingButton: {
-      sizePercent: clampNumber(
-        fb.sizePercent,
-        0,
-        1000,
-        DEFAULT_CONFIG.floatingButton.sizePercent
-      ),
-      transparencyPercent: clampNumber(
-        fb.transparencyPercent,
-        0,
-        100,
-        DEFAULT_CONFIG.floatingButton.transparencyPercent
-      ),
-      alwaysOnTop,
-      position: {
-        x: Number.isFinite(Number(position.x)) ? Math.round(Number(position.x)) : null,
-        y: Number.isFinite(Number(position.y)) ? Math.round(Number(position.y)) : null
-      }
-    },
-    pickCountDialog: {
-      defaultPlayMusic:
-        typeof pick.defaultPlayMusic === 'boolean' ? pick.defaultPlayMusic : DEFAULT_CONFIG.pickCountDialog.defaultPlayMusic,
-      backgroundDarknessPercent: clampNumber(
-        pick.backgroundDarknessPercent,
-        0,
-        100,
-        DEFAULT_CONFIG.pickCountDialog.backgroundDarknessPercent
-      ),
-      defaultCount: Math.round(
-        clampNumber(
-          pick.defaultCount,
-          1,
-          10,
-          DEFAULT_CONFIG.pickCountDialog.defaultCount
-        )
-      )
-    },
-    pickResultDialog: {
-      defaultPlayGachaSound:
-        typeof pickResult.defaultPlayGachaSound === 'boolean'
-          ? pickResult.defaultPlayGachaSound
-          : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
-      gachaSoundVolume: clampNumber(
-        pickResult.gachaSoundVolume,
-        0,
-        1,
-        DEFAULT_CONFIG.pickResultDialog.gachaSoundVolume
-      ),
-      panelOpacity: clampNumber(
-        pickResult.panelOpacity,
-        0.1,
-        1,
-        DEFAULT_CONFIG.pickResultDialog.panelOpacity
-      ),
-      panelBgColor:
-        typeof pickResult.panelBgColor === 'string' && pickResult.panelBgColor
-          ? pickResult.panelBgColor
-          : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
-      panelBorderColor:
-        typeof pickResult.panelBorderColor === 'string' && pickResult.panelBorderColor
-          ? pickResult.panelBorderColor
-          : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
-    },
-    webConfig: {
-      port: Math.round(clampNumber(web.port, 1, 65535, DEFAULT_CONFIG.webConfig.port)),
-      adminTopmostEnabled:
-        typeof web.adminTopmostEnabled === 'boolean'
-          ? web.adminTopmostEnabled
-          : DEFAULT_CONFIG.webConfig.adminTopmostEnabled,
-      adminAutoStartEnabled:
-        typeof web.adminAutoStartEnabled === 'boolean'
-          ? web.adminAutoStartEnabled
-          : DEFAULT_CONFIG.webConfig.adminAutoStartEnabled,
-      adminAutoStartPath:
-        typeof web.adminAutoStartPath === 'string'
-          ? web.adminAutoStartPath
-          : DEFAULT_CONFIG.webConfig.adminAutoStartPath,
-      adminAutoStartTaskName:
-        typeof web.adminAutoStartTaskName === 'string' && web.adminAutoStartTaskName.trim()
-          ? web.adminAutoStartTaskName.trim()
-          : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName,
-      uiAccessEnabled:
-        typeof web.uiAccessEnabled === 'boolean'
-          ? web.uiAccessEnabled
-          : DEFAULT_CONFIG.webConfig.uiAccessEnabled
-    }
+    floatingButton,
+    pickCountDialog,
+    pickResultDialog,
+    webConfig
   };
 }
 
@@ -226,13 +226,6 @@ async function openConfigDir() {
   return { ok: true, message: '已打开配置目录。' };
 }
 
-// 打开配置网页
-function openConfigPageInBrowser() {
-  const config = refreshConfig();
-  const url = `http://localhost:${config.webConfig.port}/#/config`;
-  shell.openExternal(url);
-}
-
 // 生成带中文注释的 YAML
 function toConfigYamlWithComments(config) {
   const fb = config.floatingButton;
@@ -248,53 +241,67 @@ function toConfigYamlWithComments(config) {
     : ' []';
 
   return [
-    '# 抽取名单列表',
+    '# ============================================================',
+    '#  蔚蓝点名 配置文件',
+    '#  通过配置面板（托盘 → 配置）修改后自动保存',
+    '#  也可手动编辑此文件，保存后重启应用生效',
+    '# ============================================================',
+    '',
+    '# ---- 抽取名单 ----',
     `studentList:${studentLines}`,
     `allowRepeatDraw: ${config.allowRepeatDraw ? 'true' : 'false'}`,
-      `agreedEula: ${config.agreedEula ? 'true' : 'false'}`,
+    `agreedEula: ${config.agreedEula ? 'true' : 'false'}`,
     '',
-    '# 悬浮按钮配置',
+    '# ---- 悬浮按钮 ----',
     'floatingButton:',
-    '  # 按钮大小百分比（基准 50px*50px），范围 0-1000，默认 100',
+    '  # 按钮大小百分比（50-200），默认 100',
     `  sizePercent: ${fb.sizePercent}`,
-    '  # 透明度百分比，范围 0-100（0=完全不透明，100=完全透明），默认 20',
-    `  transparencyPercent: ${fb.transparencyPercent}`,
-    '  # 是否置顶（true/false），默认 true',
+    '  # 是否始终置顶（true/false），默认 true',
     `  alwaysOnTop: ${fb.alwaysOnTop ? 'true' : 'false'}`,
-    '  # 悬浮按钮窗口位置（左上角屏幕坐标），退出时自动保存；null 表示使用系统默认位置',
+    '  # 窗口位置（屏幕坐标），退出时自动保存；null 为系统默认',
     '  position:',
     `    x: ${posX}`,
     `    y: ${posY}`,
+    '  # 自定义图标路径（本地绝对路径），空字符串为内置默认图标',
+    `  iconPath: ${yamlSingleQuote(fb.iconPath || '')}`,
+    '  # 图标尺寸（px），范围 16-128，默认 48',
+    `  iconSize: ${fb.iconSize}`,
+    '  # 按钮边框颜色（hex），默认 #ffffff',
+    `  borderColor: ${yamlSingleQuote(fb.borderColor || '#ffffff')}`,
     '',
-    '# 人数选择窗口配置',
+    '# ---- 人数选择 ----',
     'pickCountDialog:',
-    '  # 是否默认播放喜庆点名音乐（true/false），默认 false',
-    `  defaultPlayMusic: ${pick.defaultPlayMusic ? 'true' : 'false'}`,
-    '  # 背景变暗程度，范围 0-100（100 接近全黑），默认 50',
-    `  backgroundDarknessPercent: ${pick.backgroundDarknessPercent}`,
-    '  # 人数默认值，范围 1-10 的整数，默认 1',
+    '  # 默认抽取人数（1-10），默认 1',
     `  defaultCount: ${pick.defaultCount}`,
     '',
-    '# 抽奖结果动画音效配置',
+    '# ---- 抽奖结果弹窗 ----',
     'pickResultDialog:',
-    '  # 是否默认播放抽奖音效（true/false），默认 true',
+    '  # 是否播放抽卡音效（true/false），默认 true',
     `  defaultPlayGachaSound: ${pickResult.defaultPlayGachaSound ? 'true' : 'false'}`,
-    '  # 抽奖音效音量（0.0-1.0），默认 0.6',
-    `  gachaSoundVolume: ${pickResult.gachaSoundVolume}`,
+    '  # 音效音量（0-100），默认 80',
+    `  soundVolume: ${pickResult.soundVolume}`,
+    '  # 是否播放抽卡背景音乐（true/false），默认 false',
+    `  playMusic: ${pickResult.playMusic ? 'true' : 'false'}`,
+    '  # 音乐音量（0-100），默认 60',
+    `  musicVolume: ${pickResult.musicVolume}`,
+    '  # 面板不透明度（0.1-1.0），默认 0.9',
+    `  panelOpacity: ${pickResult.panelOpacity}`,
+    '  # 面板背景颜色（hex），默认 #ffffff',
+    `  panelBgColor: ${yamlSingleQuote(pickResult.panelBgColor || '#ffffff')}`,
+    '  # 面板边框颜色（hex），默认 #66ccff',
+    `  panelBorderColor: ${yamlSingleQuote(pickResult.panelBorderColor || '#66ccff')}`,
     '',
-    '# 网页配置服务',
+    '# ---- 高级设置 ----',
     'webConfig:',
-    '  # 配置网页端口（默认 21219）',
-    `  port: ${web.port}`,
     '  # 启用管理员置顶增强（Windows 下会尝试管理员权限）',
     `  adminTopmostEnabled: ${web.adminTopmostEnabled ? 'true' : 'false'}`,
-    '  # 是否创建开机计划任务（管理员权限运行）',
-    `  adminAutoStartEnabled: ${web.adminAutoStartEnabled ? 'true' : 'false'}`,
-    '  # 计划任务运行的可执行文件路径',
+    '  # 开机计划任务是否以管理员身份运行',
+    `  adminAutoStartAdmin: ${web.adminAutoStartAdmin ? 'true' : 'false'}`,
+    '  # 计划任务的可执行文件路径（留空则自动检测）',
     `  adminAutoStartPath: ${yamlSingleQuote(web.adminAutoStartPath)}`,
-    '  # 计划任务名称',
+    '  # 计划任务在任务计划程序中的显示名称',
     `  adminAutoStartTaskName: ${yamlSingleQuote(web.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
-    '  # 管理员身份运行时自动使用 UIAccess（需要 uiaccess.dll 随包分发）',
+    '  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）',
     `  uiAccessEnabled: ${web.uiAccessEnabled ? 'true' : 'false'}`,
     ''
   ].join('\n');
@@ -357,7 +364,6 @@ module.exports = {
   normalizeConfig,
   openConfigDir,
   openConfigFile,
-  openConfigPageInBrowser,
   refreshConfig,
   saveConfig,
   writeDefaultConfigIfMissing
