@@ -148,4 +148,19 @@ function registerConfigPanelIpc() {
     const update = require('./update');
     return update.checkUpdateFromMain();
   });
+
+  // 选取可执行文件路径
+  ipcMain.handle('config-panel:pick-exe-file', async () => {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog({
+      title: '选择可执行文件',
+      filters: [
+        { name: '可执行文件', extensions: ['exe'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
 }

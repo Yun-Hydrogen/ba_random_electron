@@ -135,6 +135,8 @@ src/renderer/
           @restart="appRestart"
           @create-startup-task="createStartupTask"
           @check-update="checkUpdate"
+          @reset-config="resetConfig"
+          @show-in-explorer="showInExplorer"
         />
         <TabLogs
           v-show="activeTab === 'logs'"
@@ -189,7 +191,7 @@ const {
   updateSlider, switchTab,
   draft, appInfo,
   tooltip, showChipTooltip, hideChipTooltip,
-  openConfigFile, openConfigDir, adminElevate, appRestart, createStartupTask,
+  openConfigFile, openConfigDir, adminElevate, appRestart, createStartupTask, resetConfig, showInExplorer,
   updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate,
   isClosing, closeWithAnimation, handleCancel, handleApply,
   loading,

@@ -3613,6 +3613,22 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		ipcMain$1.handle("config-panel:check-update", () => {
 			return require_update().checkUpdateFromMain();
 		});
+		ipcMain$1.handle("config-panel:pick-exe-file", async () => {
+			const { dialog } = require("electron");
+			const result = await dialog.showOpenDialog({
+				title: "选择可执行文件",
+				filters: [{
+					name: "可执行文件",
+					extensions: ["exe"]
+				}, {
+					name: "所有文件",
+					extensions: ["*"]
+				}],
+				properties: ["openFile"]
+			});
+			if (result.canceled || result.filePaths.length === 0) return null;
+			return result.filePaths[0];
+		});
 	}
 }));
 //#endregion

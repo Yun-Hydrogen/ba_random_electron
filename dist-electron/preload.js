@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld("configPanelApi", {
 	createStartupTask: (payload) => ipcRenderer.invoke("config-panel:create-startup-task", payload),
 	openConfigFile: () => ipcRenderer.invoke("config-panel:open-config-file"),
 	openConfigDir: () => ipcRenderer.invoke("config-panel:open-config-dir"),
-	checkUpdate: () => ipcRenderer.invoke("config-panel:check-update")
+	checkUpdate: () => ipcRenderer.invoke("config-panel:check-update"),
+	pickExeFile: () => ipcRenderer.invoke("config-panel:pick-exe-file")
 });
 //#endregion

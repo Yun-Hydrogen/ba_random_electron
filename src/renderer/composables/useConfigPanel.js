@@ -61,7 +61,7 @@ export function useConfigPanel() {
     floatingButton: { sizePercent: 100, alwaysOnTop: true, position: { x: null, y: null }, iconPath: '', iconSize: 48, borderColor: '#ffffff' },
     pickCountDialog: { defaultCount: 1 },
     pickResultDialog: { defaultPlayGachaSound: true, panelOpacity: 0.9, panelBgColor: '#ffffff', panelBorderColor: '#66ccff', playMusic: false, soundVolume: 80, musicVolume: 60 },
-    webConfig: { port: 21219, adminTopmostEnabled: false, adminAutoStartEnabled: false, adminAutoStartPath: '', adminAutoStartTaskName: 'Blue Random (Admin)', uiAccessEnabled: false }
+    webConfig: { port: 21219, adminTopmostEnabled: false, adminAutoStartEnabled: false, adminAutoStartPath: '', adminAutoStartTaskName: 'Blue Random (Admin)', adminAutoStartAdmin: true, uiAccessEnabled: false }
   })
 
   const appInfo = reactive({ isAdmin: false, isUiAccess: false, isWindows: false, uiAccessDllExists: false, configPath: '', configDir: '', exePath: '', version: '' })
@@ -97,8 +97,16 @@ export function useConfigPanel() {
   async function createStartupTask() {
     await window.configPanelApi?.createStartupTask({
       exePath: draft.webConfig.adminAutoStartPath || appInfo.exePath,
-      taskName: draft.webConfig.adminAutoStartTaskName
+      taskName: draft.webConfig.adminAutoStartTaskName,
+      admin: draft.webConfig.adminAutoStartAdmin
     })
+  }
+  function resetConfig() {
+    // 重置为默认值并通知渲染进程刷新
+    if (window.configPanelApi) window.configPanelApi.resetConfig?.()
+  }
+  function showInExplorer() {
+    if (window.configPanelApi) window.configPanelApi.openConfigDir?.()
   }
 
   const updateLoading = ref(false)
@@ -174,7 +182,7 @@ export function useConfigPanel() {
     updateSlider, switchTab,
     draft, appInfo,
     tooltip, showChipTooltip, hideChipTooltip,
-    fetchAppInfo, openConfigFile, openConfigDir, adminElevate, appRestart, createStartupTask,
+    fetchAppInfo, openConfigFile, openConfigDir, adminElevate, appRestart, createStartupTask, resetConfig, showInExplorer,
     updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate,
     isClosing, closeWithAnimation, handleCancel, handleApply,
     loading,
