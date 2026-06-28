@@ -5,7 +5,7 @@
 
   功能概述：
     1. 按钮样式   —— 大小百分比 / 屏幕位置 X,Y / 持续置顶开关
-    2. 中心图标   —— 自定义图片路径 + 文件选择器 + 圆形预览 + 图标尺寸滑条
+    2. 中心图标   —— 文件选择器（FileReader → base64 data URL）+ 圆形预览 + 图标尺寸滑条
     3. 边框颜色   —— 自定义 HSL 调色盘（色相条 + 饱和度/明度面板 + hex 输入）
     4. 滑条填充   —— 所有滑条均有轨道填充效果（rangeFill 函数）
 
@@ -16,10 +16,19 @@
 
   主题色：初音绿 #39c5bb，所有控件颜色硬编码在 CSS 中
 
+  图标存储方案（base64 data URL）：
+    - 用户点击「选择图片」→ FileReader.readAsDataURL() 读取文件内容
+    - 将 data:image/...;base64,... 格式的字符串存入 fb.iconDataUrl
+    - 配置面板通过 iconPreviewSrc computed 直接使用 data URL 预览
+    - 悬浮按钮通过 iconSrc computed 直接使用 data URL 显示
+    - 优势：内嵌在 config.yml 中，不依赖文件路径或自定义协议，
+      开发模式（http://localhost）和生产模式（file://）均可用
+    - 注意：大图片的 base64 字符串较长，建议使用小尺寸图标
+
   注意事项：
     - 必须用扩展运算符 {...props.fb, key: newValue} 创建新对象触发响应式
     - 滑条默认值兜底：sizePercent||100, iconSize||48，防止首次渲染 NaN
-    - 图标预览使用 file:// 协议加载本地图片（反斜杠需替换为正斜杠）
+    - 图标文本框为 readonly 模式，base64 字符串无手动编辑意义
     - 调色盘基于 HSL 颜色空间，色相 0-360，饱和度/明度 0-100
     - 颜色拖拽：全局 mousemove/mouseup + touchmove/touchend 事件
     - Dialog 动画：Vue Transition，从下至上飞入 0.25s，飞出 0.18s
@@ -77,23 +86,23 @@
       <!-- 中心图标 -->
       <div class="cfg-row cfg-row-col">
         <label>中心图标</label>
-        <span class="cfg-hint-text">按钮中央显示的图片，默认使用应用图标</span>
+        <span class="cfg-hint-text">按钮中央显示的图片，点击右侧按钮选择本地图片</span>
         <div class="icon-picker-row">
           <div class="icon-actions">
             <div class="icon-path-row">
-              <input type="text" :value="fb.iconPath" @input="$emit('update:fb',{...fb,iconPath:$event.target.value})" class="capsule-input capsule-input-wide" placeholder="输入图片路径，或点击右侧按钮选择" />
+              <input type="text" :value="fb.iconDataUrl" readonly class="capsule-input capsule-input-wide" :placeholder="iconPlaceholder" />
               <label class="btn">
                 选择图片
                 <input type="file" accept="image/*" @change="handleIconPick" style="display:none" />
               </label>
             </div>
             <div class="icon-path-row icon-path-sub">
-              <span class="cfg-hint warn icon-warn">⚠ 请确保应用对该图片可读，否则可能引发未知bug!</span>
+              <span class="cfg-hint">图片将以 base64 编码存储到配置文件中</span>
               <button class="btn btn-outline" @click="resetIcon">恢复默认</button>
             </div>
           </div>
           <div class="icon-preview-box">
-            <img :src="iconPreviewSrc" class="icon-preview-img" :style="{ width: (fb.iconSize || 48) + 'px', height: (fb.iconSize || 48) + 'px' }" />
+            <img :src="iconPreviewSrc" class="icon-preview-img" :style="{ width: effectivePreviewSize + 'px', height: effectivePreviewSize + 'px' }" />
           </div>
         </div>
       </div>
@@ -102,7 +111,7 @@
       <div class="cfg-row">
         <div class="cfg-label-col">
           <label>图标大小</label>
-          <span class="cfg-hint-text">中心图标在按钮内的显示尺寸</span>
+          <span class="cfg-hint-text">中心图标在按钮内的显示尺寸（实际不超过按钮的 80%）</span>
         </div>
         <div class="cfg-slider">
           <input type="range" min="16" max="96" :value="fb.iconSize || 48" @input="$emit('update:fb',{...fb,iconSize:parseInt($event.target.value)})" :style="rangeFill(fb.iconSize || 48, 16, 96)" />
@@ -153,10 +162,11 @@
  *  组件逻辑概览（按代码顺序）：
  *  1. props / emit      —— 与父组件通信的接口
  *  2. LCP 优化          —— 延迟渲染描述文字
- *  3. 图标预览          —— 根据路径生成预览用的图片 URL
- *  4. 文件选择          —— 处理用户点击"选择图片"按钮
- *  5. 图标重置          —— 恢复默认图标设置
+ *  3. 图标预览          —— 直接使用存储的 base64 data URL（iconPreviewSrc）
+ *  4. 文件选择          —— FileReader.readAsDataURL() 将图片转 base64 存入 iconDataUrl
+ *  5. 图标重置          —— 清空 iconDataUrl 恢复默认图标
  *  6. 滑条轨道填充      —— 计算滑条已滑动区域的渐变色
+ *  7. 自定义调色盘      —— HSV 风格面板 + HSL 坐标转换 + 拖拽选取 + hex 输入
  */
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 
@@ -167,7 +177,7 @@ import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
  *    alwaysOnTop   (boolean) 是否持续置顶
  *    position.x    (number|null) 屏幕 X 坐标，null=自动
  *    position.y    (number|null) 屏幕 Y 坐标，null=自动
- *    iconPath      (string)  自定义图标路径，空字符串=使用默认图标
+ *    iconDataUrl   (string)  自定义图标（base64 data URL），空字符串=使用默认图标
  *    iconSize      (number)  图标显示尺寸(px)，默认 48
  *    borderColor   (string)  边框颜色，默认 '#ffffff'
  */
@@ -192,39 +202,84 @@ const showDesc = ref(false)
 onMounted(() => requestAnimationFrame(() => { showDesc.value = true }))
 
 // ================================================================
-//  2. 图标预览：根据路径生成可显示的图片 URL
+//  2. 图标预览：直接使用存储的 base64 data URL
 // ================================================================
 
 /* 默认图标路径（应用安装目录下的 app.ico） */
 const defaultIcon = '/image/app.ico'
 
 /*
- *  根据用户设置的图标路径生成预览用的图片 URL
- *  如果用户设置了自定义路径（fb.iconPath 非空），使用 file:// 协议加载本地文件
- *  否则使用项目自带的默认图标 /image/app.ico
- *  注意：路径中的反斜杠要替换为正斜杠，否则 file:// URL 可能无法识别
+ *  iconPlaceholder — 文本框占位提示
+ *  未设置图标时显示提示文字，设置后显示 base64 前缀预览
+ */
+const iconPlaceholder = computed(() => {
+  return (props.fb.iconDataUrl || '') ? '已设置自定义图标 (base64)' : '点击右侧按钮选择本地图片'
+})
+
+/*
+ *  iconPreviewSrc — 图标预览的 <img src> 值。
+ *
+ *  逻辑极简：
+ *    - iconDataUrl 非空 → 直接使用（本身就是 data:image/...;base64,... 格式）
+ *    - iconDataUrl 为空 → 使用内置默认图标 /image/app.ico
+ *
+ *  优势：
+ *    - data URL 内嵌在配置中，不依赖任何文件路径或自定义协议
+ *    - 开发模式（http://localhost）和生产模式（file://）均可正常显示
+ *    - 无需 local-file 协议、无需跨协议权限
  */
 const iconPreviewSrc = computed(() => {
-  const p = props.fb.iconPath
-  return p && p.trim() ? 'file:///' + p.trim().replace(/\\/g, '/') : defaultIcon
+  return (props.fb.iconDataUrl || '') ? props.fb.iconDataUrl : defaultIcon
+})
+
+/*
+ *  effectivePreviewSize — 匹配 FloatingButton 实际渲染的图标尺寸。
+ *
+ *  FloatingButton 的 iconStyle 将图标限制为按钮尺寸的 80%（最小 16px）：
+ *    effective = max(16, min(iconSize, round(sizePx × 0.8)))
+ *  其中 sizePx = 50 × (sizePercent / 100)
+ *
+ *  此处计算相同的值，确保配置面板预览与实际悬浮按钮显示一致。
+ */
+const effectivePreviewSize = computed(() => {
+  const iconSize = props.fb.iconSize || 48
+  const sizePx = Math.round(50 * ((props.fb.sizePercent || 100) / 100))
+  const maxIcon = Math.round(sizePx * 0.8)
+  return Math.max(16, Math.min(iconSize, maxIcon))
 })
 
 // ================================================================
-//  3. 文件选择：处理用户点击"选择图片"按钮
+//  3. 文件选择：用 FileReader 将图片文件读为 base64 data URL
 // ================================================================
 
 /*
- *  处理文件选择器的 change 事件
- *  在 Electron 环境下，file.path 返回用户选择的文件的完整路径
- *  将路径保存到 fb.iconPath，父组件会持久化到配置文件
- *  注意：读取完成后要把 input.value 清空，否则再次选择同一文件不会触发 change
+ *  处理文件选择器的 change 事件。
+ *
+ *  参照 TabRoster 的 FileReader 模式：
+ *    1. 从 e.target.files[0] 获取用户选择的文件
+ *    2. 用 FileReader.readAsDataURL() 读取文件内容为 data URL
+ *       （格式：data:image/png;base64,iVBORw0KGgo...）
+ *    3. 将 data URL 保存到 fb.iconDataUrl
+ *    4. 清空 input.value 以允许重复选择同一文件
+ *
+ *  注意：
+ *    - readAsDataURL 是异步操作，emit 在 onload 回调中执行
+ *    - 与之前 file.path 方案不同，这里直接读取文件数据，不再依赖文件路径
+ *    - 大图片（>1MB）的 base64 会很长，建议用户使用小尺寸图标
  */
 function handleIconPick(e) {
   const file = e.target.files[0]
   if (!file) return
-  const path = file.path || file.name
-  emit('update:fb', { ...props.fb, iconPath: path })
-  e.target.value = ''
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    emit('update:fb', { ...props.fb, iconDataUrl: ev.target.result })
+    e.target.value = ''
+  }
+  reader.onerror = () => {
+    console.error('读取图片文件失败')
+    e.target.value = ''
+  }
+  reader.readAsDataURL(file)
 }
 
 // ================================================================
@@ -232,10 +287,10 @@ function handleIconPick(e) {
 // ================================================================
 
 /*
- *  将图标路径清空（使用默认图标），图标尺寸恢复为 48px
+ *  清空 iconDataUrl（使用默认图标），图标尺寸恢复为 48px
  */
 function resetIcon() {
-  emit('update:fb', { ...props.fb, iconPath: '', iconSize: 48 })
+  emit('update:fb', { ...props.fb, iconDataUrl: '', iconSize: 48 })
 }
 
 // ================================================================
@@ -257,16 +312,27 @@ function rangeFill(val, min, max) {
 }
 
 // ================================================================
-//  6. 自定义调色盘（HSL 颜色空间）
+//  6. 自定义调色盘（HSV 风格面板 + HSL 颜色空间转换）
 // ================================================================
 
 /*
- *  调色盘工作原理：
- *  颜色用 HSL（色相 Hue / 饱和度 Saturation / 明度 Lightness）表示
- *  色相条：0°=红, 120°=绿, 240°=蓝, 360°=红（循环），用户水平拖拽选色相
- *  饱和度/明度面板：横轴 = 饱和度（左灰右纯），纵轴 = 明度（上亮下暗）
- *  两个面板共用 hslToHex 转换为十六进制颜色供 CSS 使用
- *  鼠标/触摸拖拽通过全局事件监听实现，松开时停止
+ *  调色盘工作原理（HSV 风格面板）：
+ *
+ *  饱和度/明度面板（.cp-sat-val）：
+ *    背景：linear-gradient(to right, #fff, pure-hue-at-S100-L50)
+ *          → 横轴 = 饱和度（左 0% 灰 → 右 100% 纯色）
+ *    ::after 叠加：linear-gradient(to top, #000, transparent)
+ *          → 纵轴 = 明度（下 0% 黑 → 上 100% 亮）
+ *    因此右上角 = 纯色 (S=100, L=50)，左上角 = 白色，底部 = 黑色
+ *
+ *  色相条（.cp-hue-bar）：
+ *    彩虹渐变条 → 水平拖拽选择色相 (0°-360°)
+ *
+ *  坐标 → HSL 转换公式：
+ *    L = (100 - S × 0.5) × (100 - svY) / 100
+ *    （面板背景 white→L50 纯色 + 黑色叠加的几何推导）
+ *
+ *  颜色使用 hslToHex / hexToHsl 在 HSL 和 hex 之间转换
  */
 
 /* 面板显示开关 */
@@ -282,8 +348,9 @@ const pickerColor = ref(props.fb.borderColor || '#ffffff')
 /* HSL 分量 */
 const hue = ref(0)    /* 色相 0-360 */
 const huePct = ref(0) /* 色相条百分比位置 */
-const svX = ref(100)  /* 饱和度面板横轴 0-100（对应饱和度） */
-const svY = ref(0)    /* 饱和度面板纵轴 0-100（对应 100-明度） */
+const svX = ref(100)  /* 面板横轴 0-100，对应饱和度 S（0=灰，100=纯色） */
+const svY = ref(0)    /* 面板纵轴 0-100，对应明度分量（0=顶/亮，100=底/黑）
+                          注意：svY 并非直接等于 L 或 100-L，转换见 updateFromHSL */
 
 /* 拖拽状态标志 */
 let draggingHue = false
@@ -352,22 +419,63 @@ function hexToHsl(hex) {
   return { h: h2, s: Math.round(s2 * 100), l: Math.round(l * 100) }
 }
 
-/* 从 hex 颜色同步到 HSL 分量和面板位置 */
+/*
+ *  syncFromHex — 从 hex 颜色反向推到 HSL 分量和面板坐标。
+ *
+ *  反向公式（由 updateFromHSL 的公式求逆）：
+ *    svX = S
+ *    svY = 100 - L × 100 / (100 - S × 0.5)    （若分母为 0 即 S=0 L=100 白色，则 svY=0）
+ *
+ *  验证：
+ *    白色(#fff, S=0 L=100): svX=0, svY=0 → 左上角 ✓
+ *    纯红(#f00, S=100 L=50): svX=100, svY=0 → 右上角 ✓
+ *    灰色(#808080, S=0 L=50): svX=0, svY=50 → 中左 ✓
+ *    黑色(#000, S=0 L=0): svX=0, svY=100 → 底部 ✓
+ */
 function syncFromHex(hex) {
   const hsl = hexToHsl(hex)
   hue.value = hsl.h
   huePct.value = (hsl.h / 360) * 100
   svX.value = hsl.s
-  svY.value = 100 - hsl.l
+  const denom = 100 - hsl.s * 0.5
+  // 面板色域限制：仅能表示 L ∈ [0, 100-S×0.5] 的颜色
+  // 超出范围（如高饱和度亮色 L>50）clamp 到面板边界
+  svY.value = denom > 0
+    ? Math.max(0, Math.min(100, Math.round(100 - hsl.l * 100 / denom)))
+    : 0
 }
 
-/* 从当前 HSL 分量更新预览颜色 */
+/*
+ *  updateFromHSL — 从当前 HSL 分量更新预览颜色。
+ *
+ *  面板坐标 → HSL 的正确映射（HSV 风格面板）：
+ *
+ *  面板背景：linear-gradient(to right, #fff, pure-hue-at-L50)
+ *  面板叠加：linear-gradient(to top, #000, transparent)（底部黑，顶部透）
+ *
+ *  因此面板上某点 (svX%, svY%) 对应的颜色为：
+ *    基础色（顶部）：S = svX, L_base = 100 - svX×0.5
+ *    叠加黑色后：L = L_base × (1 - svY/100) = (100 - svX×0.5) × (100 - svY) / 100
+ *
+ *  验证：
+ *    左上(0,0): S=0, L=100 → 白色 ✓
+ *    右上(100,0): S=100, L=50 → 纯色 ✓
+ *    左下(0,100): S=0, L=0 → 黑色 ✓
+ *    右下(100,100): S=100, L=0 → 黑色 ✓
+ */
 function updateFromHSL() {
-  const lightness = 100 - svY.value
-  pickerColor.value = hslToHex(hue.value, svX.value, lightness)
+  const s = svX.value
+  const baseL = 100 - s * 0.5
+  const l = Math.round(baseL * (100 - svY.value) / 100)
+  pickerColor.value = hslToHex(hue.value, s, l)
 }
 
-/* 打开/关闭调色盘，打开时从 props 同步当前颜色 */
+/*
+ *  togglePicker — 打开/关闭调色盘 Dialog。
+ *  打开时：从 props.fb.borderColor 同步面板位置和预览颜色，
+ *          确保调色盘始终反映当前已保存的配置值（而非上次调色盘的残留状态）。
+ *  关闭时：丢弃未确认的修改，不写入 props。
+ */
 function togglePicker() {
   showPicker.value = !showPicker.value
   if (showPicker.value) {
@@ -376,27 +484,47 @@ function togglePicker() {
   }
 }
 
-/* 确定：将预览颜色写入 props 并关闭面板 */
+/*
+ *  applyColor — 确认选取，将预览颜色写入配置并关闭面板。
+ *  使用扩展运算符创建新对象以触发 Vue 响应式更新。
+ */
 function applyColor() {
   emit('update:fb', { ...props.fb, borderColor: pickerColor.value })
   showPicker.value = false
 }
 
-/* hex 输入框实时输入，格式正确时同步面板 */
+/*
+ *  hex 输入框实时输入处理。
+ *  用户每键入一个字符就更新 pickerColor（所见即所得），
+ *  当输入完整合法的 6 位 hex（如 #66ccff）时同步面板位置。
+ *  格式校验：/^#[0-9a-fA-F]{6}$/
+ */
 function onHexInput(e) {
   const v = e.target.value.trim()
   pickerColor.value = v
   if (/^#[0-9a-fA-F]{6}$/.test(v)) syncFromHex(v)
 }
 
-/* hex 输入框失焦时尝试同步（允许用户粘贴后点击其他地方） */
+/*
+ *  hex 输入框失焦处理。
+ *  允许用户粘贴 hex 值后点击其他地方（而非按 Enter）来触发同步。
+ *  仅在值合法时同步，避免半截输入覆盖面板状态。
+ */
 function onHexBlur() {
   if (/^#[0-9a-fA-F]{6}$/.test(pickerColor.value)) {
     syncFromHex(pickerColor.value)
   }
 }
 
-/* 色相条拖拽：根据鼠标/触摸 X 坐标计算色相值 */
+/*
+ *  色相条拖拽处理。
+ *
+ *  hueFromClientX：根据鼠标/触摸的水平 clientX 计算色相值。
+ *    色相 = (相对条左侧的百分比) × 360°，clamp 在 [0,360]。
+ *  startHueDrag：mousedown/touchstart 时激活拖拽并立即更新色相。
+ *  onHueMove：全局 mousemove/touchmove 时持续更新。
+ *  onHueUp：全局 mouseup/touchend 时结束拖拽。
+ */
 function hueFromClientX(cx) {
   const r = hueRef.value.getBoundingClientRect()
   const p = Math.max(0, Math.min(100, ((cx - r.left) / r.width) * 100))
@@ -414,7 +542,17 @@ function onHueMove(e) {
 }
 function onHueUp() { draggingHue = false }
 
-/* 饱和度/明度面板拖拽：根据鼠标/触摸坐标计算饱和度和明度 */
+/*
+ *  饱和度/明度面板拖拽处理。
+ *
+ *  svFromClient：根据鼠标/触摸的 clientX、clientY 计算面板百分比坐标。
+ *    svX = 水平相对位置%（左=0，右=100）
+ *    svY = 垂直相对位置%（上=0，下=100）
+ *    坐标 clamp 在 [0,100] 范围内。
+ *  startSatValDrag：mousedown/touchstart 时激活拖拽并立即更新位置。
+ *  onSVMove：全局 mousemove/touchmove 时持续更新。
+ *  onSVUp：全局 mouseup/touchend 时结束拖拽。
+ */
 function svFromClient(cx, cy) {
   const r = satValRef.value.getBoundingClientRect()
   svX.value = Math.max(0, Math.min(100, ((cx - r.left) / r.width) * 100))
@@ -431,7 +569,19 @@ function onSVMove(e) {
 }
 function onSVUp() { draggingSV = false }
 
-/* 全局事件：统一处理鼠标和触摸的移动/松开 */
+/*
+ *  全局事件代理 —— 统一处理鼠标和触摸的移动/松开。
+ *
+ *  为什么用全局事件而非组件内事件：
+ *    拖拽过程中鼠标可能移出面板 DOM 元素（快速拖拽时），
+ *    若只监听元素自身的 mousemove，移出后无法继续跟踪位置。
+ *    使用 document 级别的全局事件可确保拖拽全程追踪。
+ *
+ *  onGlobalMove：根据当前激活的拖拽类型（色相/饱和度），转发到对应处理器。
+ *  onGlobalUp：同时结束所有拖拽（容错：即使某种拖拽已结束也无害）。
+ *
+ *  事件注册/注销在 onMounted / onBeforeUnmount 中成对执行，防止内存泄漏。
+ */
 function onGlobalMove(e) {
   if (draggingHue) onHueMove(e)
   if (draggingSV) onSVMove(e)
@@ -441,7 +591,16 @@ function onGlobalUp() {
   if (draggingSV) onSVUp()
 }
 
-/* 挂载时注册全局事件，卸载时移除（防止内存泄漏） */
+/*
+ *  挂载时注册全局拖拽事件，卸载时注销。
+ *  同时监听 mouse 和 touch 事件，兼容桌面与触屏设备。
+ *
+ *  事件注册在 document 而非组件 DOM 上，原因是：
+ *    拖拽过程中鼠标/手指可能移出面板元素，若仅监听元素自身事件，
+ *    移出后将丢失跟踪，导致拖拽"卡住"。全局事件保证全程追踪。
+ *
+ *  注销必须与注册成对，否则切换 Tab 或关闭面板后残留监听器导致内存泄漏。
+ */
 onMounted(() => {
   document.addEventListener('mousemove', onGlobalMove)
   document.addEventListener('mouseup', onGlobalUp)
@@ -455,7 +614,11 @@ onBeforeUnmount(() => {
   document.removeEventListener('touchend', onGlobalUp)
 })
 
-/* 外部通过 props 修改颜色时同步到预览 */
+/*
+ *  外部通过 props 修改颜色时同步到 pickerColor。
+ *  注意：仅同步 pickerColor（color-swatch 预览圆点），不同步面板坐标。
+ *  面板坐标在用户下次打开调色盘时由 togglePicker → syncFromHex 重新计算。
+ */
 watch(() => props.fb.borderColor, (c) => {
   if (c) pickerColor.value = c
 })
@@ -604,7 +767,23 @@ watch(() => props.fb.borderColor, (c) => {
 }
 .color-dialog-close:hover { background: #e55; color: #fff; }
 
-/* 饱和度/明度面板 */
+/*
+ *  饱和度/明度面板（HSV 风格）。
+ *
+ *  视觉构成：
+ *    底层背景（inline style）：linear-gradient(to right, #fff, <hue-pure-color>)
+ *      → 横轴 = 饱和度（左白 → 右纯色）
+ *    ::after 叠加层：linear-gradient(to top, #000, transparent)
+ *      → 纵轴 = 明度（下黑 → 上无叠加）
+ *
+ *  因此：
+ *    左上角 = 白色（S=0, 无黑色叠加）
+ *    右上角 = 纯色（S=100, L=50, 无黑色叠加）
+ *    底部   = 黑色（全黑叠加）
+ *
+ *  注意：JS 中 updateFromHSL / syncFromHex 的坐标转换公式
+ *        必须与此 CSS 视觉模型一致，否则选取颜色与实际显示不符。
+ */
 .cp-sat-val {
   position: relative; width: 100%; height: 160px; border-radius: 8px;
   margin-bottom: 10px; cursor: crosshair; overflow: hidden;

@@ -8,7 +8,7 @@
 - 技术：Vue 3 `<script setup>` + `vue-router`。
 
 ## 页面结构（Template）
-- `<router-view />`：由 `src/renderer/router/index.js` 决定渲染 Floating / PickResult / WebConfig。
+- `<router-view />`：由 `src/renderer/router/index.js` 决定渲染 Floating / PickResult / ConfigPanel。
 
 ## 关键逻辑
 - `watch(route.path)`：监听路由变化，当路径为 `/config` 时为 `<html>` 和 `<body>` 添加 `is-config-page` class，其余路径移除。

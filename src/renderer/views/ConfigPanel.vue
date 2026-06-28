@@ -1,87 +1,112 @@
-<!--
-# ConfigPanel.vue + 子组件 维护说明
+﻿<!--
+================================================================================
+  组件：ConfigPanel.vue
+  所属：配置面板窗口的根组件
+  路由：/config-panel（由 main.js 通过 BrowserWindow 直接加载，不经过 vue-router）
 
-## 文件架构
-```
-src/renderer/
-├── views/ConfigPanel.vue          ← 编排组件（~300 行）
-├── styles/config-shared.css       ← 非 scoped 全局共享样式
-└── components/
-    ├── TabRoster.vue              ← 名单导入 + 权重管理
-    ├── TabFloating.vue            ← 悬浮按钮配置
-    ├── TabResult.vue              ← 结果显示配置
-    ├── TabAdvanced.vue            ← 高级设置
-    └── TabLogs.vue                ← 日志输出（独立 SSE 流）
-```
+================================================================================
+  一、功能概述
+================================================================================
+  本组件是配置面板（从托盘右键 → 配置 打开）的编排组件，负责：
 
-## ConfigPanel.vue（编排组件）
-- 作用：Tab 导航 + 全局状态（draft/appInfo）+ tooltip + IPC 操作 + 主题色跟随
-- 技术：Vue 3 `<script setup>`，各 Tab 通过 props/emits 与子组件通信
-- 样式：scoped 部分仅外壳（overlay/tab-bar/footer/tooltip），共享样式由 config-shared.css 提供
+    功能              | 说明
+    ──────────────────┼──────────────────────────────────────────────
+    1. Tab 导航       | 5 个选项卡的胶囊滑块导航，主题色随 Tab 切换
+    2. 全局状态管理   | draft（配置草稿）+ appInfo（系统信息），委托给 useConfigPanel.js
+    3. 子组件编排     | TabRoster / TabFloating / TabResult / TabAdvanced / TabLogs
+    4. IPC 操作       | 保存/重置配置、管理员重启、更新检查等，通过 configPanelApi 桥接
+    5. 芯片 tooltip  | 全局 fixed 定位的 tooltip，由 TabRoster 的 chip-hover 事件触发
+    6. 主题色跟随     | 滑块/按钮/开关等控件颜色随当前 Tab 的主题色动态变化
 
-### 代码结构（<script setup> 顺序）
-1.  Imports（Vue + 5 个子组件）
-2.  Tab 定义（tabs 数组，含 SVG 图标和主题色）
-3.  Tab 导航 & 滑块（activeTab, updateSlider, switchTab, currentTab）
-4.  全局状态 — draft（配置草稿）+ appInfo（应用信息）
-5.  芯片 tooltip（全局 fixed 定位，z-index:99999）
-6.  Tab 4 高级设置 IPC 操作（fetchAppInfo, openConfigFile, adminElevate 等）
-7.  关闭 & 应用（handleCancel, handleApply, closeWithAnimation）
-8.  生命周期（onMounted：加载配置 + 初始化滑块）
-9.  主题色跟随（panelBorderStyle, applyBtnStyle, sliderStyle 等）
+================================================================================
+  二、数据流架构
+================================================================================
 
-## 子组件 Props/Emits 约定
+  +-------------------------------------------------------------+
+  |  main.js / ipc.js（主进程）                                   |
+  |  - configPanelApi 提供 15 个 IPC 通道                        |
+  |  - 读取/写入 config.yml                                      |
+  +--------------------------+----------------------------------+
+                             | IPC (contextBridge)
+                             v
+  +-------------------------------------------------------------+
+  |  useConfigPanel.js（逻辑层）                                  |
+  |  - draft（响应式配置草稿）                                    |
+  |  - 所有 IPC 操作方法（openConfigFile, adminElevate 等）       |
+  |  - Tab 导航状态（activeTab, sliderLeft 等）                   |
+  |  - tooltip 状态                                             |
+  +--------------------------+----------------------------------+
+                             | 解构导出
+                             v
+  +-------------------------------------------------------------+
+  |  ConfigPanel.vue（本组件 - 视图层）                            |
+  |  - 模板：overlay + tab-bar + config-body + footer + tooltip  |
+  |  - 仅负责渲染和事件绑定，不包含业务逻辑                        |
+  +--------------------------+----------------------------------+
+                             | props / emits
+              +--------------+-------+-------+-------+----------+
+              v              v       v       v       v
+        TabRoster    TabFloating TabResult TabAdvanced TabLogs
 
-| 组件 | Props | Emits |
-|------|-------|-------|
-| TabRoster | studentList, allowRepeatDraw | update:studentList, update:allowRepeatDraw, chip-hover, chip-leave |
-| TabFloating | fb | update:fb |
-| TabResult | pickResult | update:pickResult |
-| TabAdvanced | webConfig, appInfo, updateLoading/Status/Title/Detail | update:webConfig + 6 个操作事件 |
-| TabLogs | appInfo | 无需（内部独立 SSE 管理） |
+================================================================================
+  三、子组件 Props/Emits 约定
+================================================================================
 
-## Tab 胶囊滑块导航
-- 导轨：28px 高，白色药丸形 + 2px 主题色边框 ← `borderColor` 随 currentTab.color
-- 滑块：±3px 悬浮于导轨，`left` 0.45s / `width` 0.45s cubic-bezier(0.25,0,0.25,1)
-- 滑块宽度固定 80px
-- **动画序列**：滑块先移动 + 图标立即变白 → 等滑块到位后文字缓慢展开变色
-  - `.tab-item` color 0.2s 0s（图标跟随滑块）
-  - `.tab-text.show` max-width/opacity/color 0.5s 0.45s（文字延迟展开）
+  组件         | Props                                    | Emits
+  -------------|------------------------------------------|------------------------------
+  TabRoster    | studentList, allowRepeatDraw             | update:studentList, update:allowRepeatDraw, chip-hover, chip-leave
+  TabFloating  | fb (floatingButton 配置对象)              | update:fb
+  TabResult    | pickResult (pickResultDialog 配置对象)    | update:pickResult
+  TabAdvanced  | admin, appInfo, updateLoading/Status/Title/Detail | update:admin + 6 个操作事件
+  TabLogs      | appInfo                                  | 无需（内部独立 SSE 管理）
 
-## 共享样式（config-shared.css，非 scoped）
-- `.card` / `.card-title` / `.card-desc`
-- `.cfg-row` / `.cfg-slider` / `.cfg-input` / `.cfg-color` / `.cfg-input-wide`
-- `.cfg-btn-group` / `.cfg-sm-btn` / `.cfg-hint`
-- `.switch` / `.switch-track`
-- `.log-*` 日志系列
-- `.tab-page` 滑入动画
-- 全局滑条 `input[type=range]` 样式
+================================================================================
+  四、Tab 胶囊滑块导航
+================================================================================
+  导轨：28px 高，白色药丸形，border 颜色随 currentTab.color 动态变化
+  滑块：±3px 悬浮于导轨，left 0.45s / width 0.45s cubic-bezier，固定宽度 80px
 
-## TabRoster（名单管理）特有样式
-- `.import-capsule` / `.upload-btn` / `.count-badge`
-- `.roster-layout` / `.roster-left` / `.roster-right`
-- `.roster-textarea`（稿纸风格）
-- `.name-chip-grid` / `.name-chip`（自适应宽度 + hover/active）
-- `.roster-item`（斑马条纹）/ `.weight-slider` / `.weight-prob`（蓝色概率%）
+  动画序列：
+    1. 滑块先移动到目标 Tab 位置（0.45s）
+    2. 图标立即变白（color 0.2s 0s）
+    3. 等滑块到位后，文字缓慢展开变色（max-width/opacity/color 0.5s 0.45s）
 
-## 芯片 tooltip 机制
-- 全局 `<div class="chip-tooltip">` 放在 ConfigPanel 模板最外层
-- `position: fixed` + `z-index: 99999`，不受任何父容器裁切
-- TabRoster 通过 `@chip-hover` / `@chip-leave` 事件通知父组件
-- 父组件的 `showChipTooltip(e, student)` 计算位置并显示
+================================================================================
+  五、CSS 组织
+================================================================================
+  本文件 CSS 为 scoped，按功能分组：
+    1. 全局滚动条        — 蔚蓝主题蓝色椭圆滑块
+    2. 面板外壳          — .config-overlay + .config-panel
+    3. Tab 导航栏        — .tab-bar / .tab-slider / .tab-item / .tab-text
+    4. 内容区            — .config-body
+    5. 加载骨架          — .loading-skeleton
+    6. 导入胶囊          — .import-capsule / .upload-btn / .count-badge
+    7. 名单布局          — .roster-layout / .roster-textarea / .name-chip
+    8. 全局 tooltip      — .chip-tooltip
+    9. 通用卡片          — .card / .card-title / .card-desc
+    10. 权重管理         — .roster-item / .weight-slider / .weight-val
+    11. 配置行           — .cfg-row / .cfg-slider / .cfg-input
+    12. Switch 开关      — .switch / .switch-track
+    13. 底部按钮         — .config-footer / .capsule-btn
+    14. 日志 Tab         — .log-head / .log-row / .log-msg
+    15. 高级设置         — .section-title / .cfg-badge / .cfg-sm-btn
 
-## IPC / API 依赖
-- `configPanelApi.getConfig()` → 获取完整配置
-- `configPanelApi.saveConfig(config)` → 保存配置
-- `configPanelApi.close(saved)` → 关闭面板
-- `configPanelApi.getAppInfo()` / `openConfigFile()` / `openConfigDir()`
-- `configPanelApi.adminElevate()` / `restart()` / `createStartupTask()` / `checkUpdate()`
+================================================================================
+  六、维护注意事项
+================================================================================
+  - 业务逻辑全在 useConfigPanel.js 中，本文件只做渲染和事件转发
+  - 新增 Tab 时：在模板中按相同模式添加子组件 + 在 useConfigPanel tabs 数组中注册
+  - CSS 虽然是 scoped，但滚动条伪元素（::-webkit-scrollbar）会影响全局
+  - 底部按钮（取消）的样式不跟随 Tab 主题色，但应用按钮跟随。
+
+  最后更新：2026-06-28
+================================================================================
 -->
-
 <template>
   <div class="config-overlay" :class="{ 'is-closing': isClosing }" @click.self="isClosing ? null : handleCancel()">
     <div class="config-panel" :class="{ 'panel-enter': true }">
-      <!-- Tab 悬浮胶囊滑块导航 -->
+
+      <!-- ====== Tab 胶囊滑块导航 ====== -->
       <div class="tab-bar" ref="tabBarRef" :style="trackBorderStyle">
         <div class="tab-slider" :style="sliderStyle"></div>
         <button
@@ -99,7 +124,7 @@ src/renderer/
         </button>
       </div>
 
-      <!-- 内容区 -->
+      <!-- ====== 内容区（5 个 Tab 通过 v-show 切换，保持 DOM 状态） ====== -->
       <div class="config-body" v-if="!loading">
         <TabRoster
           v-show="activeTab === 'roster'"
@@ -122,13 +147,13 @@ src/renderer/
         />
         <TabAdvanced
           v-show="activeTab === 'advanced'"
-          :webConfig="draft.webConfig"
+          :admin="draft.admin"
           :appInfo="appInfo"
           :updateLoading="updateLoading"
           :updateStatus="updateStatus"
           :updateTitle="updateTitle"
           :updateDetail="updateDetail"
-          @update:webConfig="draft.webConfig = $event"
+          @update:admin="draft.admin = $event"
           @open-config-file="openConfigFile"
           @open-config-dir="openConfigDir"
           @admin-elevate="adminElevate"
@@ -144,13 +169,13 @@ src/renderer/
         />
       </div>
 
-      <!-- 加载骨架：窗口打开但数据未就绪时显示 -->
+      <!-- ====== 加载骨架（窗口打开但数据未就绪时显示） ====== -->
       <div v-else class="loading-skeleton">
         <div class="loading-spinner"></div>
-        <p>正在加载配置…</p>
+        <p>正在加载配置...</p>
       </div>
 
-      <!-- 底部悬浮胶囊按钮 -->
+      <!-- ====== 底部悬浮胶囊按钮（取消 / 应用并关闭） ====== -->
       <div class="config-footer">
         <button class="capsule-btn capsule-cancel" @click="handleCancel">
           <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -163,7 +188,7 @@ src/renderer/
       </div>
     </div>
 
-    <!-- 全局 tooltip（最高图层） -->
+    <!-- ====== 全局 tooltip（fixed 定位，z-index: 99999，不受任何父容器裁切） ====== -->
     <div
       class="chip-tooltip"
       :class="{ show: tooltip.visible }"
@@ -176,9 +201,17 @@ src/renderer/
 </template>
 
 <script setup>
-// ============================================================
-//  ConfigPanel.vue — 编排组件，JS 逻辑全部在 useConfigPanel 中
-// ============================================================
+/*
+ *  ConfigPanel.vue — 纯编排组件（视图层）。
+ *
+ *  所有 JS 逻辑（状态管理、IPC 操作、Tab 导航）均在 useConfigPanel.js 中实现。
+ *  本文件仅负责：
+ *    1. 导入子组件和逻辑层
+ *    2. 解构 useConfigPanel 返回的状态和方法
+ *    3. 在模板中绑定 props / emits / 事件
+ *
+ *  如需修改业务逻辑，请编辑 src/renderer/composables/useConfigPanel.js。
+ */
 import TabRoster   from '../components/TabRoster.vue'
 import TabFloating from '../components/TabFloating.vue'
 import TabResult   from '../components/TabResult.vue'
@@ -187,20 +220,43 @@ import TabLogs     from '../components/TabLogs.vue'
 import { useConfigPanel } from '../composables/useConfigPanel.js'
 
 const {
+  /* Tab 导航 */
   tabs, activeTab, tabBarRef, sliderLeft, sliderWidth, currentTab,
   updateSlider, switchTab,
+
+  /* 全局状态 */
   draft, appInfo,
+
+  /* 芯片 tooltip */
   tooltip, showChipTooltip, hideChipTooltip,
-  openConfigFile, openConfigDir, adminElevate, appRestart, createStartupTask, resetConfig, showInExplorer,
+
+  /* IPC 操作 */
+  openConfigFile, openConfigDir, adminElevate, appRestart,
+  createStartupTask, resetConfig, showInExplorer,
+
+  /* 更新检查 */
   updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate,
+
+  /* 关闭与动画 */
   isClosing, closeWithAnimation, handleCancel, handleApply,
   loading,
+
+  /* 主题色跟随样式 */
   panelBorderStyle, applyBtnStyle, sliderStyle, trackBorderStyle, tabItemStyle
 } = useConfigPanel()
 </script>
 
 <style scoped>
-/* ---- 全局滚动条：蔚蓝档案主题蓝色椭圆滑块 ---- */
+/*
+ *  本文件 CSS 为 scoped（Vue 自动添加 data-v-xxx 属性隔离），
+ *  但 ::-webkit-scrollbar 等伪元素不受 scoped 影响（浏览器全局生效）。
+ *  按功能分为 15 个分组，每组以分隔注释标识。
+ */
+
+/* =================================================================
+   1. 全局滚动条 —— 蔚蓝档案主题蓝色椭圆滑块
+   注意：::-webkit 伪元素不受 Vue scoped 限制，会影响整个窗口
+   ================================================================= */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -222,15 +278,32 @@ const {
   background: transparent;
 }
 
+/* =================================================================
+   2. 面板外壳
+   ================================================================= */
+
+/*
+ *  全屏半透明遮罩层。
+ *  @click.self：点击遮罩空白处 → handleCancel()（等于点击取消按钮）
+ */
 .config-overlay {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: 'UI', 'Bahnschrift', 'Microsoft YaHei UI', sans-serif;
 }
 
+/*
+ *  配置面板本体（白色圆角卡片）。
+ *  border-color 由 panelBorderStyle 跟随当前 Tab 主题色动态变化。
+ */
 .config-panel {
-  width: 100%; height: 100%;
-  display: flex; flex-direction: column;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   border-radius: 12px;
   border: 1.5px solid #000000;
   background: #fff;
@@ -238,7 +311,14 @@ const {
   transition: border-color 0.3s;
 }
 
-/* Tab 悬浮胶囊滑块导航 */
+/* =================================================================
+   3. Tab 胶囊滑块导航
+   ================================================================= */
+
+/*
+ *  导轨：白色药丸形，28px 高。
+ *  border-color 由 trackBorderStyle 跟随当前 Tab 主题色。
+ */
 .tab-bar {
   position: relative;
   display: flex;
@@ -255,20 +335,27 @@ const {
   transition: border-color 0.3s;
 }
 
-/* 滑块：略高于导轨，微悬浮效果 */
+/*
+ *  滑块：比导轨略大（±3px），微悬浮效果。
+ *  left/width 由 JS 动态计算，0.45s cubic-bezier 平滑过渡。
+ */
 .tab-slider {
   position: absolute;
   top: -3px;
   bottom: -3px;
   border-radius: 999px;
-  transition: left 0.45s cubic-bezier(0.25, 0, 0.25, 1),
-              width 0.45s cubic-bezier(0.25, 0, 0.25, 1),
-              background 0.35s;
+  transition:
+    left 0.45s cubic-bezier(0.25, 0, 0.25, 1),
+    width 0.45s cubic-bezier(0.25, 0, 0.25, 1),
+    background 0.35s;
   z-index: 1;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
 }
 
-/* Tab 文字：覆盖在滑块上方 */
+/*
+ *  Tab 按钮：覆盖在滑块上方（z-index: 2）。
+ *  color 由 JS 动态设置（未选中=主题色, 选中=白色）。
+ */
 .tab-item {
   flex: 1 1 0;
   min-width: 0;
@@ -282,17 +369,17 @@ const {
   cursor: pointer;
   position: relative;
   z-index: 2;
-  font-family: inherit;
   font-family: 'Bahnschrift', 'Segoe UI Variable', 'Microsoft YaHei UI', sans-serif;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.2px;
-  transition: color 0.2s 0s;
+  color: inherit;
   outline: none;
   -webkit-tap-highlight-color: transparent;
-  color: inherit;
+  transition: color 0.2s 0s;
 }
 
+/* 图标 + 文字的水平排列 */
 .tab-label {
   display: inline-flex;
   align-items: center;
@@ -300,7 +387,10 @@ const {
   color: inherit;
 }
 
-/* 未选中：文字隐藏 + 颜色跟随图标 */
+/*
+ *  未选中状态：文字隐藏（max-width: 0 + overflow: hidden）。
+ *  选中状态（.show）：文字展开（max-width: 64px），延迟 0.45s 等滑块到位。
+ */
 .tab-text {
   display: inline-block;
   max-width: 0;
@@ -308,15 +398,22 @@ const {
   white-space: nowrap;
   opacity: 0;
   color: inherit;
-  transition: max-width 0.15s ease 0s, opacity 0.15s ease 0s, color 0.15s 0s;
+  transition:
+    max-width 0.15s ease 0s,
+    opacity 0.15s ease 0s,
+    color 0.15s 0s;
 }
-/* 选中：滑块到位后文字缓慢展开 */
+
 .tab-text.show {
   max-width: 64px;
   opacity: 1;
-  transition: max-width 0.5s ease 0.45s, opacity 0.5s ease 0.45s, color 0.5s 0.45s;
+  transition:
+    max-width 0.5s ease 0.45s,
+    opacity 0.5s ease 0.45s,
+    color 0.5s 0.45s;
 }
 
+/* SVG 图标尺寸和线条样式 */
 .tab-icon-svg :deep(svg) {
   display: block;
   width: 14px;
@@ -328,14 +425,18 @@ const {
   stroke-linejoin: round;
 }
 
-/* 内容区 */
+/* =================================================================
+   4. 内容区
+   ================================================================= */
 .config-body {
   flex: 1;
   overflow-y: auto;
   padding: 24px 32px 16px 32px;
 }
 
-/* ---- 加载骨架 ---- */
+/* =================================================================
+   5. 加载骨架
+   ================================================================= */
 .loading-skeleton {
   flex: 1;
   display: flex;
@@ -346,15 +447,26 @@ const {
   color: #99a;
   font-size: 13px;
 }
+
+/* 旋转动画的圆形 spinner */
 .loading-spinner {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border: 3px solid #e8ecf2;
   border-top-color: #66ccff;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =================================================================
+   6. 导入胶囊（名单导入的横向胶囊控件）
+   ================================================================= */
 .import-capsule {
   display: flex;
   align-items: center;
@@ -365,6 +477,7 @@ const {
   border: 1.5px solid #898989;
   background: #fff;
 }
+
 .import-hint {
   flex: 1;
   font-size: 12px;
@@ -386,34 +499,39 @@ const {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
 .upload-btn:hover {
   filter: brightness(1.06);
 }
 
 .count-badge {
+  display: inline-flex;
+  align-items: center;
   padding: 7px 8px 5px;
   font-size: 12px;
+  font-weight: 600;
   color: #fff;
   white-space: nowrap;
   flex-shrink: 0;
-  background: #66CCFF;
+  background: #66ccff;
   border-radius: 999px;
-  font-weight: 600;
-  align-items: center;
-  display: inline-flex;
 }
 
-/* ---- 名单左右布局 ---- */
+/* =================================================================
+   7. 名单左右布局（textarea + 芯片预览）
+   ================================================================= */
 .roster-layout {
   display: flex;
   gap: 13px;
   align-items: flex-start;
 }
+
 .roster-left {
   flex: 0 0 34%;
   display: flex;
   flex-direction: column;
 }
+
 .roster-right {
   overflow-y: auto;
   height: 220px;
@@ -438,7 +556,10 @@ const {
   user-select: none;
 }
 
-/* ----  textarea ---- */
+/*
+ *  稿纸风格 textarea。
+ *  白色带淡黄底色 + 内阴影，2 倍行距模拟稿纸横线。
+ */
 .roster-textarea {
   width: 100%;
   height: 220px;
@@ -451,27 +572,36 @@ const {
   line-height: 2;
   letter-spacing: 0.5px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
   background-color: #fdfcf8;
   color: #334;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
   white-space: nowrap;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
+
 .roster-textarea:hover {
   border-color: #a0b8cc;
 }
+
 .roster-textarea:focus {
   border-color: #66ccff;
-  box-shadow: 0 0 0 3px rgba(102, 204, 255, 0.12), inset 0 1px 3px rgba(0,0,0,0.04);
+  box-shadow:
+    0 0 0 3px rgba(102, 204, 255, 0.12),
+    inset 0 1px 3px rgba(0, 0, 0, 0.04);
   background-color: #fffef9;
 }
 
-/* ---- 名单标签芯片 ---- */
+/* =================================================================
+   8. 名单标签芯片
+   ================================================================= */
 .name-chip-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
 }
+
 .name-chip {
   text-align: center;
   padding: 5px 8px;
@@ -481,19 +611,31 @@ const {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.15s, filter 0.15s;
-  user-select: none;
   white-space: nowrap;
+  user-select: none;
+  transition:
+    transform 0.15s,
+    filter 0.15s;
 }
+
 .name-chip:hover {
   filter: brightness(1.1);
 }
+
 .name-chip:active {
   transform: scale(0.96);
   filter: brightness(0.85);
 }
 
-/* 全局 tooltip（fixed 定位，不受父容器裁切） */
+/* =================================================================
+   9. 全局 tooltip
+   ================================================================= */
+
+/*
+ *  fixed 定位，z-index: 99999，不受任何父容器裁切。
+ *  默认透明（opacity: 0），.show 时淡入。
+ *  箭头（.chip-tooltip-arrow）指向触发元素。
+ */
 .chip-tooltip {
   position: fixed;
   padding: 5px 10px;
@@ -506,13 +648,17 @@ const {
   pointer-events: none;
   opacity: 0;
   transform: translateY(3px);
-  transition: opacity 0.18s, transform 0.18s;
   z-index: 99999;
+  transition:
+    opacity 0.18s,
+    transform 0.18s;
 }
+
 .chip-tooltip.show {
   opacity: 1;
   transform: translateY(0);
 }
+
 .chip-tooltip-arrow {
   position: absolute;
   top: -8px;
@@ -522,7 +668,9 @@ const {
   border-bottom-color: rgba(30, 36, 48, 0.9);
 }
 
-/* ---- 通用卡片 ---- */
+/* =================================================================
+   10. 通用卡片
+   ================================================================= */
 .card {
   padding: 14px 16px;
   margin-bottom: 12px;
@@ -530,12 +678,14 @@ const {
   background: #f8fafc;
   border: 1px solid #e8ecf2;
 }
+
 .card-title {
   font-size: 14px;
   font-weight: 700;
   color: #334;
   margin-bottom: 4px;
 }
+
 .card-desc {
   font-size: 12px;
   color: #99a;
@@ -543,6 +693,9 @@ const {
   line-height: 1.5;
 }
 
+/* =================================================================
+   11. 权重管理
+   ================================================================= */
 .inline-check {
   display: flex;
   align-items: center;
@@ -557,10 +710,11 @@ const {
   align-items: center;
   justify-content: space-between;
   margin: 10px 0px 3px;
-  padding:0px 0px 10px;
+  padding: 0px 0px 10px;
   border-bottom: 1.5px solid #eee;
 }
 
+/* 空白名单占位图 */
 .empty-tip {
   color: #ccc;
   font-size: 14px;
@@ -575,6 +729,7 @@ const {
   margin: 0 auto 8px;
 }
 
+/* 权重列表容器（固定高度 + 滚动） */
 .student-table-wrap {
   max-height: 240px;
   overflow-y: auto;
@@ -586,6 +741,7 @@ const {
   gap: 4px;
 }
 
+/* 斑马条纹：偶数行浅蓝灰背景 */
 .roster-item {
   display: flex;
   align-items: center;
@@ -595,6 +751,7 @@ const {
   background: #f7f9fb;
   transition: background 0.3s;
 }
+
 .roster-item:nth-child(even) {
   background: #eef2f7;
 }
@@ -612,6 +769,7 @@ const {
   gap: 6px;
 }
 
+/* 删除按钮（红色 X） */
 .roster-del {
   width: 24px;
   height: 24px;
@@ -626,11 +784,13 @@ const {
   justify-content: center;
   transition: all 0.2s;
 }
+
 .roster-del:hover {
   background: #fcc;
   color: #d33;
 }
 
+/* 重置权重按钮 */
 .roster-reset {
   padding: 4px 12px;
   border: 1px solid #dde;
@@ -643,11 +803,13 @@ const {
   white-space: nowrap;
   transition: all 0.2s;
 }
+
 .roster-reset:hover {
   border-color: #aab;
   color: #667;
 }
 
+/* 权重滑条（窄条 + 圆滑块） */
 .weight-slider {
   width: 70px;
   height: 4px;
@@ -659,6 +821,7 @@ const {
   cursor: pointer;
   vertical-align: middle;
 }
+
 .weight-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px;
@@ -666,9 +829,10 @@ const {
   border-radius: 50%;
   background: #66ccff;
   border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
+/* 权重数值（右对齐） */
 .weight-val {
   display: inline-block;
   width: 28px;
@@ -678,6 +842,7 @@ const {
   color: #88a;
 }
 
+/* 概率百分比（蓝色） */
 .weight-prob {
   display: inline-block;
   min-width: 48px;
@@ -687,7 +852,9 @@ const {
   color: #66ccff;
 }
 
-/* 配置行 */
+/* =================================================================
+   12. 通用配置行（标签 + 控件横向排列）
+   ================================================================= */
 .cfg-row {
   display: flex;
   align-items: center;
@@ -695,15 +862,19 @@ const {
   padding: 10px 0;
   border-bottom: 1px solid #f5f5f5;
 }
+
 .cfg-row label:first-child {
   font-size: 14px;
   color: #444;
 }
+
 .cfg-slider {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
+/* 全局 range 滑条样式（WebKit + Firefox） */
 .cfg-row input[type=range] {
   -webkit-appearance: none;
   appearance: none;
@@ -714,6 +885,7 @@ const {
   outline: none;
   cursor: pointer;
 }
+
 .cfg-row input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -722,24 +894,27 @@ const {
   border-radius: 50%;
   background: #66ccff;
   border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   cursor: pointer;
   transition: background 0.3s;
 }
+
 .cfg-row input[type=range]::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: #66ccff;
   border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   cursor: pointer;
 }
+
 .cfg-slider span {
   font-size: 13px;
   color: #888;
   min-width: 36px;
 }
+
 .cfg-input {
   width: 80px;
   padding: 4px 8px;
@@ -748,6 +923,7 @@ const {
   font-size: 13px;
   text-align: center;
 }
+
 .cfg-color {
   width: 40px;
   height: 28px;
@@ -757,7 +933,15 @@ const {
   padding: 2px;
 }
 
-/* Switch — 主题色跟随 */
+/* =================================================================
+   13. Switch 开关
+   ================================================================= */
+
+/*
+ *  CSS 纯手工 Switch。
+ *  隐藏原生 checkbox，用 .switch-track + ::after 伪元素绘制轨道和滑块。
+ *  选中态背景由 JS 动态覆盖（跟随 Tab 主题色）。
+ */
 .switch {
   position: relative;
   display: inline-block;
@@ -765,11 +949,13 @@ const {
   height: 24px;
   cursor: pointer;
 }
+
 .switch input {
   opacity: 0;
   width: 0;
   height: 0;
 }
+
 .switch-track {
   position: absolute;
   inset: 0;
@@ -777,6 +963,7 @@ const {
   background: #ccc;
   transition: 0.2s;
 }
+
 .switch-track::after {
   content: '';
   position: absolute;
@@ -788,15 +975,18 @@ const {
   background: #fff;
   transition: 0.2s;
 }
+
 .switch input:checked + .switch-track {
   background: #66ccff;
 }
+
 .switch input:checked + .switch-track::after {
   transform: translateX(20px);
 }
 
-/* 底部按钮 */
-/* 底部悬浮胶囊按钮 */
+/* =================================================================
+   14. 底部按钮（取消 / 应用并关闭）
+   ================================================================= */
 .config-footer {
   display: flex;
   justify-content: flex-end;
@@ -816,24 +1006,48 @@ const {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: filter 0.2s, transform 0.15s;
   white-space: nowrap;
+  transition:
+    filter 0.2s,
+    transform 0.15s;
 }
-.capsule-btn:hover { filter: brightness(1.1)}
-.capsule-btn:active { transform: translateY(0); }
 
-.capsule-cancel { background: #ff8c8c; }
-.capsule-apply { background: #66ccff; }
+.capsule-btn:hover {
+  filter: brightness(1.1);
+}
 
-/* ---- 日志 Tab ---- */
+.capsule-btn:active {
+  transform: translateY(0);
+}
+
+/* 取消 = 红色，应用 = 蓝色（可由 JS 覆盖为主题色） */
+.capsule-cancel {
+  background: #ff8c8c;
+}
+
+.capsule-apply {
+  background: #66ccff;
+}
+
+/* =================================================================
+   15. 日志 Tab（TabLogs 子组件样式覆盖，因 scoped 需要在此定义）
+   ================================================================= */
 .log-head {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
 }
-.log-head-title { font-size: 14px; font-weight: 600; color: #444; }
-.log-head-spacer { flex: 1; }
+
+.log-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #444;
+}
+
+.log-head-spacer {
+  flex: 1;
+}
 
 .log-badge {
   display: inline-flex;
@@ -846,6 +1060,7 @@ const {
   background: #66ccff;
   line-height: 1.4;
 }
+
 .log-badge-ver {
   background: #c0c8d0;
 }
@@ -861,6 +1076,7 @@ const {
   font-family: inherit;
   transition: all 0.2s;
 }
+
 .log-clear-btn:hover {
   border-color: #aaa;
   color: #555;
@@ -871,6 +1087,7 @@ const {
   font-size: 12px;
   font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
 }
+
 .log-empty {
   color: #ccc;
   font-size: 13px;
@@ -885,6 +1102,7 @@ const {
   padding: 2px 0;
   border-bottom: 1px solid #fafbfc;
 }
+
 .log-time {
   color: #b0b8c0;
   white-space: nowrap;
@@ -892,6 +1110,7 @@ const {
   font-size: 11px;
 }
 
+/* 日志级别圆点 */
 .log-dot {
   width: 6px;
   height: 6px;
@@ -899,21 +1118,44 @@ const {
   flex-shrink: 0;
   margin-top: 4px;
 }
-.dot-info  { background: #99ccdd; }
-.dot-warn  { background: #e8a840; }
-.dot-error { background: #e05555; }
-.dot-success { background: #55b888; }
+
+.dot-info {
+  background: #99ccdd;
+}
+
+.dot-warn {
+  background: #e8a840;
+}
+
+.dot-error {
+  background: #e05555;
+}
+
+.dot-success {
+  background: #55b888;
+}
 
 .log-msg {
   word-break: break-all;
   color: #556;
   line-height: 1.5;
 }
-.log-warn .log-msg  { color: #a07030; }
-.log-error .log-msg { color: #c04040; }
-.log-success .log-msg { color: #3a8050; }
 
-/* ---- 高级设置 ---- */
+.log-warn .log-msg {
+  color: #a07030;
+}
+
+.log-error .log-msg {
+  color: #c04040;
+}
+
+.log-success .log-msg {
+  color: #3a8050;
+}
+
+/* =================================================================
+   16. 高级设置（TabAdvanced 子组件样式覆盖）
+   ================================================================= */
 .section-title {
   font-size: 13px;
   font-weight: 700;
@@ -922,6 +1164,7 @@ const {
   padding-bottom: 6px;
   border-bottom: 1px solid #e8ecf0;
 }
+
 .cfg-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -931,11 +1174,16 @@ const {
   background: #66ccff;
   margin-left: 4px;
 }
-.cfg-badge-ver { background: #aaa; }
+
+.cfg-badge-ver {
+  background: #aaa;
+}
+
 .cfg-btn-group {
   display: flex;
   gap: 6px;
 }
+
 .cfg-sm-btn {
   padding: 5px 14px;
   border: 1px solid #d0d6dc;
@@ -947,57 +1195,19 @@ const {
   color: #556;
   transition: all 0.2s;
 }
+
 .cfg-sm-btn:hover {
   border-color: #aab;
   background: #f5f7fa;
   color: #334;
 }
+
 .cfg-sm-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 .cfg-input-wide {
   flex: 1;
-  max-width: 260px;
-  padding: 5px 10px;
-  border: 1px solid #d0d6dc;
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s;
 }
-.cfg-input-wide:focus {
-  border-color: #66ccff;
-}
-.cfg-hint {
-  font-size: 12px;
-  color: #888;
-  margin-top: 4px;
-}
-.cfg-hint.warn { color: #e80; }
-.cfg-hint.update { color: #4a8; }
-.cfg-hint.ok { color: #888; }
-.cfg-hint.error { color: #d44; }
-.update-detail-text {
-  font-size: 12px;
-  color: #888;
-  white-space: pre-wrap;
-  margin-top: 4px;
-}
-.font-credit {
-  font-size: 12px;
-  color: #99a;
-}
-.font-credit a { color: #99aabb; }
-</style>
-
-<!-- 非 scoped 全局样式（滚动条） -->
-<style>
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(102, 204, 255, 0.35); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(102, 204, 255, 0.55); }
-::-webkit-scrollbar-button { display: none; }
-::-webkit-scrollbar-corner { background: transparent; }
 </style>

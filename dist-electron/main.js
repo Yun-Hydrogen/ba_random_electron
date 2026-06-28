@@ -3,9 +3,9 @@ var __commonJSMin = (cb, mod) => () => (mod || cb((mod = { exports: {} }).export
 //#endregion
 //#region src/main/admin.js
 var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$3 } = require("electron");
+	var { app: app$4 } = require("electron");
 	var { execFileSync, spawnSync } = require("child_process");
-	var fs$2 = require("fs");
+	var fs$3 = require("fs");
 	var path$3 = require("path");
 	var IS_WINDOWS = process.platform === "win32";
 	var ADMIN_TASK_DEFAULT_NAME = "Blue Random (Admin)";
@@ -14,10 +14,10 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var IS_UIACCESS_PROCESS = process.argv.includes(UIACCESS_ARG);
 	function configureUserDataPath() {
 		if (!IS_WINDOWS) return;
-		const appData = app$3.getPath("appData");
+		const appData = app$4.getPath("appData");
 		const localRoot = path$3.resolve(appData, "..", "Local");
 		const targetPath = path$3.join(localRoot, USERDATA_DIR_NAME);
-		app$3.setPath("userData", targetPath);
+		app$4.setPath("userData", targetPath);
 	}
 	function quoteForPowerShell(text) {
 		return String(text).replace(/'/g, "''");
@@ -26,13 +26,18 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (!IS_WINDOWS) return "powershell";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
 		const psPath = path$3.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-		return fs$2.existsSync(psPath) ? psPath : "powershell";
+		return fs$3.existsSync(psPath) ? psPath : "powershell";
 	}
 	function getRundll32Path() {
 		if (!IS_WINDOWS) return "rundll32.exe";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
 		const dllPath = path$3.join(root, "System32", "rundll32.exe");
-		return fs$2.existsSync(dllPath) ? dllPath : "rundll32.exe";
+		return fs$3.existsSync(dllPath) ? dllPath : "rundll32.exe";
+	}
+	function buildUiAccessCommandLine(exePath, args) {
+		const quote = (value) => `"${String(value).replace(/"/g, "\\\"")}"`;
+		const safeArgs = Array.isArray(args) ? args : [];
+		return [quote(exePath), ...safeArgs.map((arg) => quote(arg))].join(" ");
 	}
 	function isProcessElevated() {
 		if (!IS_WINDOWS) return false;
@@ -83,27 +88,22 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 	}
 	function getDefaultExePath() {
-		return app$3.getPath("exe");
+		return app$4.getPath("exe");
 	}
 	function getDefaultUiAccessDllPath() {
 		const exeDir = path$3.dirname(getDefaultExePath());
 		return path$3.join(exeDir, "uiaccess.dll");
-	}
-	function buildUiAccessCommandLine(exePath, args) {
-		const quote = (value) => `"${String(value).replace(/"/g, "\\\"")}"`;
-		const safeArgs = Array.isArray(args) ? args : [];
-		return [quote(exePath), ...safeArgs.map((arg) => quote(arg))].join(" ");
 	}
 	function requestUiAccessRelaunch(uiAccessDllPath) {
 		if (!IS_WINDOWS) return {
 			ok: false,
 			message: "当前系统不支持 UIAccess。"
 		};
-		if (!app$3.isPackaged) return {
+		if (!app$4.isPackaged) return {
 			ok: false,
 			message: "UIAccess 仅支持正式版运行。"
 		};
-		if (!uiAccessDllPath || !fs$2.existsSync(uiAccessDllPath)) return {
+		if (!uiAccessDllPath || !fs$3.existsSync(uiAccessDllPath)) return {
 			ok: false,
 			message: "未找到 uiaccess.dll，请检查路径。"
 		};
@@ -156,7 +156,7 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			ok: false,
 			message: "仅支持 Windows 计划任务。"
 		};
-		if (!exePath || !fs$2.existsSync(exePath)) return {
+		if (!exePath || !fs$3.existsSync(exePath)) return {
 			ok: false,
 			message: "可执行文件路径无效或不存在。"
 		};
@@ -2357,8 +2357,8 @@ var require_js_yaml = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/config.js
 var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$2, shell } = require("electron");
-	var fs$1 = require("fs");
+	var { app: app$3, shell: shell$1 } = require("electron");
+	var fs$2 = require("fs");
 	var path$2 = require("path");
 	var yaml = require_js_yaml();
 	var admin = require_admin();
@@ -2368,12 +2368,13 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		agreedEula: false,
 		floatingButton: {
 			sizePercent: 100,
+			transparencyPercent: 20,
 			alwaysOnTop: true,
 			position: {
 				x: null,
 				y: null
 			},
-			iconPath: "",
+			iconDataUrl: "",
 			iconSize: 48,
 			borderColor: "#ffffff"
 		},
@@ -2383,11 +2384,13 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			soundVolume: 80,
 			playMusic: false,
 			musicVolume: 60,
+			bgmStartTime: 0,
+			bgmFadeDuration: 1.5,
 			panelOpacity: .9,
 			panelBgColor: "#ffffff",
 			panelBorderColor: "#66ccff"
 		},
-		webConfig: {
+		admin: {
 			adminTopmostEnabled: false,
 			adminAutoStartAdmin: true,
 			adminAutoStartPath: "",
@@ -2395,7 +2398,6 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			uiAccessEnabled: false
 		}
 	};
-	var currentConfig = DEFAULT_CONFIG;
 	function clampNumber(value, min, max, fallback) {
 		const num = Number(value);
 		if (Number.isNaN(num)) return fallback;
@@ -2421,12 +2423,13 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const alwaysOnTop = typeof fb.alwaysOnTop === "boolean" ? fb.alwaysOnTop : DEFAULT_CONFIG.floatingButton.alwaysOnTop;
 		const floatingButton = {
 			sizePercent: clampNumber(fb.sizePercent, 50, 200, DEFAULT_CONFIG.floatingButton.sizePercent),
+			transparencyPercent: clampNumber(fb.transparencyPercent, 0, 100, DEFAULT_CONFIG.floatingButton.transparencyPercent),
 			alwaysOnTop,
 			position: {
 				x: Number.isFinite(Number(fbPos.x)) ? Math.round(Number(fbPos.x)) : null,
 				y: Number.isFinite(Number(fbPos.y)) ? Math.round(Number(fbPos.y)) : null
 			},
-			iconPath: typeof fb.iconPath === "string" ? fb.iconPath : DEFAULT_CONFIG.floatingButton.iconPath,
+			iconDataUrl: typeof fb.iconDataUrl === "string" && fb.iconDataUrl.startsWith("data:image/") ? fb.iconDataUrl : DEFAULT_CONFIG.floatingButton.iconDataUrl,
 			iconSize: clampNumber(fb.iconSize, 16, 128, DEFAULT_CONFIG.floatingButton.iconSize),
 			borderColor: typeof fb.borderColor === "string" && fb.borderColor ? fb.borderColor : DEFAULT_CONFIG.floatingButton.borderColor
 		};
@@ -2438,11 +2441,13 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			soundVolume: clampNumber(pickResult.soundVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.soundVolume),
 			playMusic: typeof pickResult.playMusic === "boolean" ? pickResult.playMusic : DEFAULT_CONFIG.pickResultDialog.playMusic,
 			musicVolume: clampNumber(pickResult.musicVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.musicVolume),
+			bgmStartTime: clampNumber(pickResult.bgmStartTime, 0, 120, DEFAULT_CONFIG.pickResultDialog.bgmStartTime),
+			bgmFadeDuration: clampNumber(pickResult.bgmFadeDuration, .5, 5, DEFAULT_CONFIG.pickResultDialog.bgmFadeDuration),
 			panelOpacity: clampNumber(pickResult.panelOpacity, .1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
 			panelBgColor: typeof pickResult.panelBgColor === "string" && pickResult.panelBgColor ? pickResult.panelBgColor : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
 			panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
 		};
-		const web = source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
+		const adminSource = source.admin && typeof source.admin === "object" ? source.admin : source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
 		return {
 			studentList: students,
 			allowRepeatDraw,
@@ -2450,65 +2455,39 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			floatingButton,
 			pickCountDialog,
 			pickResultDialog,
-			webConfig: {
-				adminTopmostEnabled: typeof web.adminTopmostEnabled === "boolean" ? web.adminTopmostEnabled : DEFAULT_CONFIG.webConfig.adminTopmostEnabled,
-				adminAutoStartAdmin: typeof web.adminAutoStartAdmin === "boolean" ? web.adminAutoStartAdmin : DEFAULT_CONFIG.webConfig.adminAutoStartAdmin,
-				adminAutoStartPath: typeof web.adminAutoStartPath === "string" ? web.adminAutoStartPath : DEFAULT_CONFIG.webConfig.adminAutoStartPath,
-				adminAutoStartTaskName: typeof web.adminAutoStartTaskName === "string" && web.adminAutoStartTaskName.trim() ? web.adminAutoStartTaskName.trim() : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName,
-				uiAccessEnabled: typeof web.uiAccessEnabled === "boolean" ? web.uiAccessEnabled : DEFAULT_CONFIG.webConfig.uiAccessEnabled
+			admin: {
+				adminTopmostEnabled: typeof adminSource.adminTopmostEnabled === "boolean" ? adminSource.adminTopmostEnabled : DEFAULT_CONFIG.admin.adminTopmostEnabled,
+				adminAutoStartAdmin: typeof adminSource.adminAutoStartAdmin === "boolean" ? adminSource.adminAutoStartAdmin : DEFAULT_CONFIG.admin.adminAutoStartAdmin,
+				adminAutoStartPath: typeof adminSource.adminAutoStartPath === "string" ? adminSource.adminAutoStartPath : DEFAULT_CONFIG.admin.adminAutoStartPath,
+				adminAutoStartTaskName: typeof adminSource.adminAutoStartTaskName === "string" && adminSource.adminAutoStartTaskName.trim() ? adminSource.adminAutoStartTaskName.trim() : DEFAULT_CONFIG.admin.adminAutoStartTaskName,
+				uiAccessEnabled: typeof adminSource.uiAccessEnabled === "boolean" ? adminSource.uiAccessEnabled : DEFAULT_CONFIG.admin.uiAccessEnabled
 			}
 		};
 	}
 	function getConfigPath() {
-		return path$2.join(app$2.getPath("userData"), "config.yml");
+		return path$2.join(app$3.getPath("userData"), "config.yml");
+	}
+	function getConfigDir() {
+		return path$2.dirname(getConfigPath());
 	}
 	function getLegacyConfigPaths() {
 		const legacyPaths = [];
-		const exeDir = path$2.dirname(app$2.getPath("exe"));
+		const exeDir = path$2.dirname(app$3.getPath("exe"));
 		legacyPaths.push(path$2.join(exeDir, "config.yml"));
-		if (!app$2.isPackaged) legacyPaths.push(path$2.join(process.cwd(), "config.yml"));
+		if (!app$3.isPackaged) legacyPaths.push(path$2.join(process.cwd(), "config.yml"));
 		if (admin.IS_WINDOWS) {
-			const appData = app$2.getPath("appData");
+			const appData = app$3.getPath("appData");
 			const localRoot = path$2.resolve(appData, "..", "Local");
 			legacyPaths.push(path$2.join(localRoot, "Blue Random", "config.yml"));
 		}
 		const currentPath = getConfigPath();
 		return Array.from(new Set(legacyPaths.filter((p) => p && p !== currentPath)));
 	}
-	function getConfigDir() {
-		return path$2.dirname(getConfigPath());
-	}
-	async function openConfigFile() {
-		const configPath = getConfigPath();
-		writeDefaultConfigIfMissing(configPath);
-		const result = await shell.openPath(configPath);
-		if (result) return {
-			ok: false,
-			message: `打开配置文件失败: ${result}`
-		};
-		return {
-			ok: true,
-			message: "已打开配置文件。"
-		};
-	}
-	async function openConfigDir() {
-		const configDir = getConfigDir();
-		fs$1.mkdirSync(configDir, { recursive: true });
-		const result = await shell.openPath(configDir);
-		if (result) return {
-			ok: false,
-			message: `打开配置目录失败: ${result}`
-		};
-		return {
-			ok: true,
-			message: "已打开配置目录。"
-		};
-	}
 	function toConfigYamlWithComments(config) {
 		const fb = config.floatingButton;
 		const pick = config.pickCountDialog;
 		const pickResult = config.pickResultDialog;
-		const web = config.webConfig;
+		const adminCfg = config.admin;
 		const posX = Number.isFinite(Number(fb.position.x)) ? String(Math.round(Number(fb.position.x))) : "null";
 		const posY = Number.isFinite(Number(fb.position.y)) ? String(Math.round(Number(fb.position.y))) : "null";
 		const yamlSingleQuote = (value) => `'${String(value || "").replace(/'/g, "''")}'`;
@@ -2528,14 +2507,17 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			"floatingButton:",
 			"  # 按钮大小百分比（50-200），默认 100",
 			`  sizePercent: ${fb.sizePercent}`,
+			"  # 透明度百分比（0-100），0=不透明，100=全透明，默认 20",
+			`  transparencyPercent: ${fb.transparencyPercent}`,
 			"  # 是否始终置顶（true/false），默认 true",
 			`  alwaysOnTop: ${fb.alwaysOnTop ? "true" : "false"}`,
 			"  # 窗口位置（屏幕坐标），退出时自动保存；null 为系统默认",
 			"  position:",
 			`    x: ${posX}`,
 			`    y: ${posY}`,
-			"  # 自定义图标路径（本地绝对路径），空字符串为内置默认图标",
-			`  iconPath: ${yamlSingleQuote(fb.iconPath || "")}`,
+			"  # 自定义图标（base64 data URL，data:image/...;base64,...），空字符串为内置默认图标",
+			"  # 由 TabFloating 通过 FileReader 生成并保存，不可手动编辑",
+			`  iconDataUrl: ${yamlSingleQuote(fb.iconDataUrl || "")}`,
 			"  # 图标尺寸（px），范围 16-128，默认 48",
 			`  iconSize: ${fb.iconSize}`,
 			"  # 按钮边框颜色（hex），默认 #ffffff",
@@ -2556,6 +2538,10 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			`  playMusic: ${pickResult.playMusic ? "true" : "false"}`,
 			"  # 音乐音量（0-100），默认 60",
 			`  musicVolume: ${pickResult.musicVolume}`,
+			"  # BGM 播放起始位置（秒），范围 0-120，默认 0（从头开始）",
+			`  bgmStartTime: ${pickResult.bgmStartTime}`,
+			"  # BGM 淡入淡出时长（秒），范围 0.5-5，默认 1.5",
+			`  bgmFadeDuration: ${pickResult.bgmFadeDuration}`,
 			"  # 面板不透明度（0.1-1.0），默认 0.9",
 			`  panelOpacity: ${pickResult.panelOpacity}`,
 			"  # 面板背景颜色（hex），默认 #ffffff",
@@ -2564,31 +2550,31 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			`  panelBorderColor: ${yamlSingleQuote(pickResult.panelBorderColor || "#66ccff")}`,
 			"",
 			"# ---- 高级设置 ----",
-			"webConfig:",
+			"admin:",
 			"  # 启用管理员置顶增强（Windows 下会尝试管理员权限）",
-			`  adminTopmostEnabled: ${web.adminTopmostEnabled ? "true" : "false"}`,
+			`  adminTopmostEnabled: ${adminCfg.adminTopmostEnabled ? "true" : "false"}`,
 			"  # 开机计划任务是否以管理员身份运行",
-			`  adminAutoStartAdmin: ${web.adminAutoStartAdmin ? "true" : "false"}`,
+			`  adminAutoStartAdmin: ${adminCfg.adminAutoStartAdmin ? "true" : "false"}`,
 			"  # 计划任务的可执行文件路径（留空则自动检测）",
-			`  adminAutoStartPath: ${yamlSingleQuote(web.adminAutoStartPath)}`,
+			`  adminAutoStartPath: ${yamlSingleQuote(adminCfg.adminAutoStartPath)}`,
 			"  # 计划任务在任务计划程序中的显示名称",
-			`  adminAutoStartTaskName: ${yamlSingleQuote(web.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
+			`  adminAutoStartTaskName: ${yamlSingleQuote(adminCfg.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
 			"  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）",
-			`  uiAccessEnabled: ${web.uiAccessEnabled ? "true" : "false"}`,
+			`  uiAccessEnabled: ${adminCfg.uiAccessEnabled ? "true" : "false"}`,
 			""
 		].join("\n");
 	}
 	function saveConfig(config) {
 		const configPath = getConfigPath();
 		const yamlText = toConfigYamlWithComments(config);
-		fs$1.mkdirSync(path$2.dirname(configPath), { recursive: true });
-		fs$1.writeFileSync(configPath, yamlText, "utf8");
+		fs$2.mkdirSync(path$2.dirname(configPath), { recursive: true });
+		fs$2.writeFileSync(configPath, yamlText, "utf8");
 	}
 	function writeDefaultConfigIfMissing(configPath) {
-		if (fs$1.existsSync(configPath)) return;
-		for (const legacyPath of getLegacyConfigPaths()) if (fs$1.existsSync(legacyPath)) {
-			fs$1.mkdirSync(path$2.dirname(configPath), { recursive: true });
-			fs$1.copyFileSync(legacyPath, configPath);
+		if (fs$2.existsSync(configPath)) return;
+		for (const legacyPath of getLegacyConfigPaths()) if (fs$2.existsSync(legacyPath)) {
+			fs$2.mkdirSync(path$2.dirname(configPath), { recursive: true });
+			fs$2.copyFileSync(legacyPath, configPath);
 			return;
 		}
 		saveConfig(DEFAULT_CONFIG);
@@ -2597,7 +2583,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const configPath = getConfigPath();
 		writeDefaultConfigIfMissing(configPath);
 		try {
-			const raw = fs$1.readFileSync(configPath, "utf8");
+			const raw = fs$2.readFileSync(configPath, "utf8");
 			const normalized = normalizeConfig(yaml.load(raw));
 			saveConfig(normalized);
 			return normalized;
@@ -2609,8 +2595,33 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 	}
 	function refreshConfig() {
-		currentConfig = loadConfig();
-		return currentConfig;
+		return loadConfig();
+	}
+	async function openConfigFile() {
+		const configPath = getConfigPath();
+		writeDefaultConfigIfMissing(configPath);
+		const result = await shell$1.openPath(configPath);
+		if (result) return {
+			ok: false,
+			message: `打开配置文件失败: ${result}`
+		};
+		return {
+			ok: true,
+			message: "已打开配置文件。"
+		};
+	}
+	async function openConfigDir() {
+		const configDir = getConfigDir();
+		fs$2.mkdirSync(configDir, { recursive: true });
+		const result = await shell$1.openPath(configDir);
+		if (result) return {
+			ok: false,
+			message: `打开配置目录失败: ${result}`
+		};
+		return {
+			ok: true,
+			message: "已打开配置目录。"
+		};
 	}
 	module.exports = {
 		DEFAULT_CONFIG,
@@ -2629,23 +2640,23 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/windows.js
 var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { BrowserWindow: BrowserWindow$1, screen } = require("electron");
+	var { BrowserWindow: BrowserWindow$1, screen, shell } = require("electron");
 	var path$1 = require("path");
 	var config = require_config();
 	var dragSessions = /* @__PURE__ */ new Map();
 	var floatingButtonWindow = null;
-	var isFloatingHiddenForPickCount = false;
 	var pickResultWindow = null;
+	var configPanelWindow = null;
+	var isFloatingHiddenForPickCount = false;
 	var isPickResultWindowReady = false;
+	var isDebugMode = false;
+	var isQuitting = false;
 	var currentPickResults = [];
 	var pickResultToken = 0;
 	var activePickResultToken = 0;
-	var floatingWindowWatchdog = null;
-	var isDebugMode = false;
-	var isQuitting = false;
 	var floatingExpanded = false;
 	var floatingExpandedSize = null;
-	var configPanelWindow = null;
+	var floatingWindowWatchdog = null;
 	var FLOATING_WINDOW_FADE_MS = 400;
 	var WEIGHT_BOOST_GAMMA = 1.5;
 	function setDebugMode(value) {
@@ -2659,6 +2670,9 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}
 	function getPickResultWindow() {
 		return pickResultWindow;
+	}
+	function getConfigPanelWindow() {
+		return configPanelWindow;
 	}
 	function getCurrentPickResults() {
 		return currentPickResults;
@@ -2799,13 +2813,11 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) return floatingButtonWindow;
 		const cfg = config.refreshConfig();
 		const baseSize = getFloatingButtonWindowSize();
-		const winWidth = baseSize.width;
-		const winHeight = baseSize.height;
 		const hasSavedX = Number.isFinite(Number(cfg.floatingButton.position.x));
 		const hasSavedY = Number.isFinite(Number(cfg.floatingButton.position.y));
 		const windowOptions = {
-			width: winWidth,
-			height: winHeight,
+			width: baseSize.width,
+			height: baseSize.height,
 			frame: false,
 			resizable: false,
 			minimizable: false,
@@ -2831,16 +2843,14 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		floatingButtonWindow = win;
 		if (floatingExpanded && floatingExpandedSize) resizeFloatingButtonWindow(floatingExpandedSize);
 		if (cfg.floatingButton.alwaysOnTop) win.setAlwaysOnTop(true, "screen-saver");
-		if (cfg.webConfig && cfg.webConfig.adminTopmostEnabled && typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+		if (cfg.admin && cfg.admin.adminTopmostEnabled && typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 		win.setMenuBarVisibility(false);
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(process.env.VITE_DEV_SERVER_URL);
 		else {
 			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 			win.loadFile(path$1.join(__dirname, "../dist/index.html"));
 		}
-		win.webContents.on("context-menu", (event) => {
-			event.preventDefault();
-		});
+		win.webContents.on("context-menu", (event) => event.preventDefault());
 		win.on("hide", () => {
 			if (isQuitting || isFloatingHiddenForPickCount) return;
 			setTimeout(() => {
@@ -2997,9 +3007,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (pool.length === 0 || count <= 0) return [];
 		const targetCount = Math.max(0, count);
 		const picked = [];
-		const allowRepeatDraw = Boolean(cfg.allowRepeatDraw);
-		if (pool.length === 0) return picked;
-		if (allowRepeatDraw) {
+		if (Boolean(cfg.allowRepeatDraw)) {
 			const weightedPool = pool.map((s) => ({
 				name: s.name,
 				weight: Math.pow(s.weight, WEIGHT_BOOST_GAMMA)
@@ -3070,6 +3078,10 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		});
 		configPanelWindow = win;
 		win.setMenuBarVisibility(false);
+		win.webContents.setWindowOpenHandler(({ url }) => {
+			shell.openExternal(url);
+			return { action: "deny" };
+		});
 		win.once("ready-to-show", () => {
 			win.show();
 			win.focus();
@@ -3094,11 +3106,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (configPanelWindow && !configPanelWindow.isDestroyed()) configPanelWindow.close();
 		configPanelWindow = null;
 	}
-	function getConfigPanelWindow() {
-		return configPanelWindow;
-	}
 	module.exports = {
-		closeConfigPanelWindow,
 		closeConfigPanelWindow,
 		closePickResultWindow,
 		createConfigPanelWindow,
@@ -3128,7 +3136,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/update.js
 var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$1, net } = require("electron");
+	var { app: app$2, net } = require("electron");
 	function parseVersionYaml(text) {
 		const lines = String(text || "").split(/\r?\n/);
 		const data = {};
@@ -3184,7 +3192,7 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const repoOwner = "Yun-Hydrogen";
 		const repoName = "ba_random_electron";
 		const debug = [];
-		const localVersion = app$1.getVersion();
+		const localVersion = app$2.getVersion();
 		const releaseApi = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
 		debug.push(`GET ${releaseApi}`);
 		const releaseResp = await fetchUrl(releaseApi);
@@ -3262,8 +3270,8 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		return {
 			ok: true,
 			status: "easter",
-			title: `这是为什么呢？${localVersion}`,
-			detail: "看起来你正在使用来自未来的版本...",
+			title: `这是为什么呢？本地版本为：${localVersion}`,
+			detail: `远端版本为：${remoteVersion}，看起来你正在使用来自未来的版本...`,
 			commitUrl,
 			releaseUrl: release.html_url || `https://github.com/${repoOwner}/${repoName}/releases/latest`,
 			localVersion,
@@ -3276,9 +3284,12 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/ipc.js
 var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { ipcMain: ipcMain$1 } = require("electron");
+	var { ipcMain: ipcMain$1, app: app$1, dialog } = require("electron");
+	var fs$1 = require("fs");
 	var config = require_config();
 	var windows = require_windows();
+	var admin = require_admin();
+	var update = require_update();
 	function registerIpcHandlers() {
 		ipcMain$1.handle("floating-button:get-config", () => {
 			return config.refreshConfig().floatingButton;
@@ -3319,10 +3330,6 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			windows.setFloatingButtonExpanded(payload);
 		});
 	}
-	module.exports = {
-		registerIpcHandlers,
-		registerConfigPanelIpc
-	};
 	function registerConfigPanelIpc() {
 		ipcMain$1.handle("config-panel:get-config", () => {
 			return config.refreshConfig();
@@ -3337,37 +3344,35 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
 		});
 		ipcMain$1.handle("config-panel:get-app-info", () => {
-			const admin = require_admin();
-			require_update();
 			return {
 				isAdmin: admin.isProcessElevated(),
 				isUiAccess: process.argv.includes(admin.UIACCESS_ARG),
 				isWindows: admin.IS_WINDOWS,
-				uiAccessDllExists: require("fs").existsSync(admin.getDefaultUiAccessDllPath()),
+				uiAccessDllExists: fs$1.existsSync(admin.getDefaultUiAccessDllPath()),
 				configPath: config.getConfigPath(),
 				configDir: config.getConfigDir(),
 				exePath: admin.getDefaultExePath(),
-				version: require("electron").app.getVersion()
+				version: app$1.getVersion()
 			};
 		});
 		ipcMain$1.handle("config-panel:admin-elevate", () => {
-			const result = require_admin().requestAdminRelaunch();
+			const result = admin.requestAdminRelaunch();
 			if (result.ok) {
 				windows.setQuitting(true);
-				setTimeout(() => require("electron").app.exit(0), 150);
+				setTimeout(() => app$1.exit(0), 150);
 			}
 			return result;
 		});
 		ipcMain$1.handle("config-panel:restart", () => {
 			windows.setQuitting(true);
 			setTimeout(() => {
-				require("electron").app.relaunch();
-				require("electron").app.exit(0);
+				app$1.relaunch();
+				app$1.exit(0);
 			}, 80);
 			return { ok: true };
 		});
 		ipcMain$1.handle("config-panel:create-startup-task", (_event, payload) => {
-			return require_admin().createAdminStartupTask({
+			return admin.createAdminStartupTask({
 				taskName: payload.taskName,
 				exePath: payload.exePath
 			});
@@ -3379,10 +3384,9 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			return config.openConfigDir();
 		});
 		ipcMain$1.handle("config-panel:check-update", () => {
-			return require_update().checkUpdateFromMain();
+			return update.checkUpdateFromMain();
 		});
 		ipcMain$1.handle("config-panel:pick-exe-file", async () => {
-			const { dialog } = require("electron");
 			const result = await dialog.showOpenDialog({
 				title: "选择可执行文件",
 				filters: [{
@@ -3403,13 +3407,16 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			return { ok: true };
 		});
 	}
+	module.exports = {
+		registerIpcHandlers,
+		registerConfigPanelIpc
+	};
 }));
 //#endregion
 //#region src/main/logging.js
 var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var LOG_BUFFER_LIMIT = 600;
 	var logBuffer = [];
-	var logClients = /* @__PURE__ */ new Set();
 	function pushLog(level, text) {
 		const time = (/* @__PURE__ */ new Date()).toISOString();
 		const entry = {
@@ -3420,8 +3427,6 @@ var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 		logBuffer.push(entry);
 		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
-		const payload = `data: ${JSON.stringify(entry)}\n\n`;
-		for (const res of logClients) res.write(payload);
 	}
 	function attachConsoleLogger() {
 		[
@@ -3451,25 +3456,8 @@ var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
 		});
 	}
-	function handleLogStream(req, res) {
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream; charset=utf-8",
-			"Cache-Control": "no-cache",
-			"Connection": "keep-alive",
-			"X-Accel-Buffering": "no"
-		});
-		res.write("\n");
-		logClients.add(res);
-		logBuffer.forEach((entry) => {
-			res.write(`data: ${JSON.stringify(entry)}\n\n`);
-		});
-		req.on("close", () => {
-			logClients.delete(res);
-		});
-	}
 	module.exports = {
 		attachConsoleLogger,
-		handleLogStream,
 		pushLog,
 		registerRendererLogIpc
 	};
@@ -3516,7 +3504,6 @@ var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region src/main/main.js
 var { app, BrowserWindow, ipcMain } = require("electron");
 var fs = require("fs");
-require("path");
 var { execSync } = require("child_process");
 if (process.platform === "win32") try {
 	execSync("chcp 65001", { stdio: "ignore" });
@@ -3544,7 +3531,7 @@ process.on("unhandledRejection", (reason) => {
 ipc.registerIpcHandlers();
 app.whenReady().then(() => {
 	const startupConfig = config.refreshConfig();
-	if (startupConfig.webConfig && startupConfig.webConfig.uiAccessEnabled && admin.IS_WINDOWS && !admin.IS_UIACCESS_PROCESS) {
+	if (startupConfig.admin && startupConfig.admin.uiAccessEnabled && admin.IS_WINDOWS && !admin.IS_UIACCESS_PROCESS) {
 		if (admin.isProcessElevated()) {
 			const dllPath = admin.getDefaultUiAccessDllPath();
 			if (fs.existsSync(dllPath)) {
@@ -3558,7 +3545,7 @@ app.whenReady().then(() => {
 			} else console.error("UIAccess dll missing:", dllPath);
 		}
 	}
-	if (startupConfig.webConfig && startupConfig.webConfig.adminTopmostEnabled && admin.IS_WINDOWS && !admin.isProcessElevated()) {
+	if (startupConfig.admin && startupConfig.admin.adminTopmostEnabled && admin.IS_WINDOWS && !admin.isProcessElevated()) {
 		if (admin.requestAdminRelaunch().ok) {
 			windows.setQuitting(true);
 			app.exit(0);

@@ -23,31 +23,31 @@
 
   ┌─────────────────────────────────────────────────────────────┐
   │  ConfigPanel.vue（父组件）                                    │
-  │  - 持有全部状态（webConfig, appInfo, update*）                │
+  │  - 持有全部状态（admin, appInfo, update*）                │
   │  - 通过 props 向下传递给 TabAdvanced                         │
   │  - 通过 emit 事件接收子组件的操作请求                          │
   └────────────┬────────────────────────────────────┬───────────┘
                │ Props（只读数据）                    │ Emit（事件上报）
                ▼                                     ▼
   ┌─────────────────────────────────────────────────────────────┐
-  │  TabAdvanced.vue（本组件）                                    │
+  │  TabAdvanced.vue（本组件）                                  │
   │                                                             │
-  │  Props 接收：                                                │
-  │    webConfig      — 完整的配置对象（config.yml 解析结果）     │
-  │    appInfo        — 主进程采集的系统信息（isAdmin、路径等）    │
-  │    updateLoading  — 是否正在检查更新                         │
-  │    updateStatus   — 更新状态字符串（update / error / ''）     │
-  │    updateTitle    — 更新结果标题                             │
-  │    updateDetail   — 更新结果详情                             │
+  │  Props 接收：                                               │
+  │    admin          — 高级设置对象（管理员权限、计划任务等）  │
+  │    appInfo        — 主进程采集的系统信息（isAdmin、路径等   │
+  │    updateLoading  — 是否正在检查更新                        │
+  │    updateStatus   — 更新状态字符串（update / error / ''）   │
+  │    updateTitle    — 更新结果标题                            │
+  │    updateDetail   — 更新结果详情                            │
   │                                                             │
-  │  Emits 发送：                                                │
-  │    update:webConfig   — 修改配置项（Vue v-model 协议）       │
-  │    create-startup-task — 创建/更新 Windows 计划任务          │
-  │    admin-elevate      — 请求管理员权限重启                   │
-  │    restart            — 普通重启应用                         │
-  │    check-update       — 触发更新检查                         │
-  │    reset-config       — 确认重置所有配置（二次确认后触发）    │
-  │    show-in-explorer   — 在资源管理器中打开配置文件所在目录    │
+  │  Emits 发送：                                               │
+  │    update:admin       — 修改高级设置（Vue v-model 协议）    │
+  │    create-startup-task — 创建/更新 Windows 计划任务         │
+  │    admin-elevate      — 请求管理员权限重启                  │
+  │    restart            — 普通重启应用                        │
+  │    check-update       — 触发更新检查                        │
+  │    reset-config       — 确认重置所有配置（二次确认后触发）  │
+  │    show-in-explorer   — 在资源管理器中打开配置文件所在目录  │
   └─────────────────────────────────────────────────────────────┘
 
 ================================================================================
@@ -71,9 +71,8 @@
   - 新增配置项时，需同时在父组件 ConfigPanel.vue 的 draft 中初始化对应字段
   - emit 事件名需与父组件的 @event-name 监听器保持一致
   - 修改主题色时需同步更新滚动条 rgba 值和所有硬编码的 #aa88dd
-  - 不要在此组件中直接修改 props，始终通过 emit('update:webConfig', ...) 上报
+  - 不要在此组件中直接修改 props，始终通过 emit('update:admin', ...) 上报
 
-  维护者：AI + 用户协作
   最后更新：2026-06-27
 ================================================================================
 -->
@@ -100,8 +99,8 @@
         <div class="adv-input-row">
           <input
             type="text"
-            :value="webConfig.adminAutoStartPath"
-            @input="$emit('update:webConfig', { ...webConfig, adminAutoStartPath: $event.target.value })"
+            :value="admin.adminAutoStartPath"
+            @input="$emit('update:admin', { ...admin, adminAutoStartPath: $event.target.value })"
             class="adv-input"
             placeholder="留空则自动检测"
           />
@@ -119,8 +118,8 @@
       <div class="cfg-row" style="border:none; padding-top:0;">
         <input
           type="text"
-          :value="webConfig.adminAutoStartTaskName"
-          @input="$emit('update:webConfig', { ...webConfig, adminAutoStartTaskName: $event.target.value })"
+          :value="admin.adminAutoStartTaskName"
+          @input="$emit('update:admin', { ...admin, adminAutoStartTaskName: $event.target.value })"
           class="adv-input"
           placeholder="Blue Random (Admin)"
         />
@@ -135,8 +134,8 @@
         <label class="switch">
           <input
             type="checkbox"
-            :checked="webConfig.adminAutoStartAdmin !== false"
-            @change="$emit('update:webConfig', { ...webConfig, adminAutoStartAdmin: $event.target.checked })"
+            :checked="admin.adminAutoStartAdmin !== false"
+            @change="$emit('update:admin', { ...admin, adminAutoStartAdmin: $event.target.checked })"
           />
           <span class="switch-track"></span>
         </label>
@@ -165,8 +164,8 @@
         <label class="switch">
           <input
             type="checkbox"
-            :checked="webConfig.adminTopmostEnabled"
-            @change="$emit('update:webConfig', { ...webConfig, adminTopmostEnabled: $event.target.checked })"
+            :checked="admin.adminTopmostEnabled"
+            @change="$emit('update:admin', { ...admin, adminTopmostEnabled: $event.target.checked })"
           />
           <span class="switch-track"></span>
         </label>
@@ -181,13 +180,13 @@
         <label class="switch">
           <input
             type="checkbox"
-            :checked="webConfig.uiAccessEnabled"
-            @change="$emit('update:webConfig', { ...webConfig, uiAccessEnabled: $event.target.checked })"
+            :checked="admin.uiAccessEnabled"
+            @change="$emit('update:admin', { ...admin, uiAccessEnabled: $event.target.checked })"
           />
           <span class="switch-track"></span>
         </label>
       </div>
-      <div v-if="!appInfo.uiAccessDllExists && webConfig.uiAccessEnabled" class="cfg-hint warn">
+      <div v-if="!appInfo.uiAccessDllExists && admin.uiAccessEnabled" class="cfg-hint warn">
         ⚠ 未检测到 uiaccess.dll，UIAccess 功能将不可用
       </div>
     </div>
@@ -249,36 +248,52 @@
     <div class="card">
       <div class="card-title">关于</div>
       <div class="about-section">
+
         <p class="about-item">
           <span class="about-label">界面字体</span>
           南西新圆体 —
           <a href="https://opensource.org/license/IPA" target="_blank" rel="noopener">IPA Font License</a>
         </p>
+
         <p class="about-item">
           <span class="about-label">源码许可</span>
-          <a href="https://www.gnu.org/licenses/agpl-3.0.en.html#license-text" target="_blank" rel="noopener">AGPLv3</a>
+          <a href="https://www.gnu.org/licenses/agpl-3.0.en.html#license-text" target="_blank" rel="noopener">GNU Affero Generaal Public License Version 3</a>
         </p>
+
         <p class="about-item">
           <span class="about-label">项目主页</span>
-          <a href="https://github.com/Yun-Hydrogen/ba_random_electron" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/Yun-Hydrogen/ba_random_electron" target="_blank" rel="noopener">Ba-Random GitHub</a>
         </p>
+
+        <p class="about-item">
+          <span class="about-label">三方组件</span>
+          UIAccess
+          <a href="https://github.com/shc0743/RunUIAccess" target="_blank" rel="noopener">GitHub </a>
+          |
+          <a href="https://github.com/shc0743/RunUIAccess/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        </p>
+
         <p class="about-item">
           <span class="about-label">相关链接</span>
           《蔚蓝档案》国际
           <a href="https://bluearchive.nexon.com/" target="_blank" rel="noopener">Blue Archive</a>
         </p>
+
         <p class="about-item">
           <span class="about-label">相关链接</span>
           《蔚蓝档案》国服
           <a href="https://bluearchive-cn.com/" target="_blank" rel="noopener">蔚蓝档案</a>
         </p>
+
         <p class="about-item about-copyright">
           Blue Archive由NEXON Korea Corp.&amp;NEXON GAMES Co.,Ltd.持有版权并保留所有权利。
           在中国大陆区域，《蔚蓝档案》由 NEXON GAMES Co., Ltd. 和 Shanghai Yostar Co., Ltd. 持有版权并保留所有权利。
         </p>
+
         <p class="about-item about-copyright">
           《蔚蓝点名》是一款从《蔚蓝档案》和 Blue Archive 获得灵感而开放的非官方的第三方工具，软件源代码与 NEXON Korea Corp.、NEXON GAMES Co., Ltd.、Shanghai Yostar Co., Ltd. 没有任何关联。
         </p>
+        
         <p class="about-item about-copyright">
           《蔚蓝点名》使用了部分来自《蔚蓝档案》和 Blue Archive 的游戏美术和音乐资源，这些资源的版权归 NEXON Korea Corp.、NEXON GAMES Co., Ltd.、Shanghai Yostar Co., Ltd. 所有。
         </p>
@@ -321,16 +336,16 @@ import { ref, onMounted } from 'vue'
 // ============================================================
 //  Props 定义（从父组件 ConfigPanel.vue 接收的数据）
 //  注意：props 是只读的，不能直接修改！
-//  要修改配置，必须通过 emit('update:webConfig', 新对象) 上报
+//  要修改配置，必须通过 emit('update:admin', 新对象) 上报
 // ============================================================
 const props = defineProps({
   /*
-   * webConfig — 完整配置对象
-   * 结构参考 config.yml，包含所有 Tab 的配置字段
+   * admin — 高级设置对象
+   * 包含管理员权限、计划任务、UIAccess 等高级配置
    * 常用字段：adminAutoStartPath, adminAutoStartTaskName,
    *           adminAutoStartAdmin, adminTopmostEnabled, uiAccessEnabled
    */
-  webConfig: Object,
+  admin: Object,
 
   /*
    * appInfo — 主进程采集的系统信息
@@ -360,12 +375,12 @@ const props = defineProps({
 // ============================================================
 const emit = defineEmits([
   /*
-   * update:webConfig — 修改配置项（Vue v-model 协议）
-   * payload: 新的完整 webConfig 对象
-   * 用法：emit('update:webConfig', { ...props.webConfig, 字段: 新值 })
+   * update:admin — 修改高级设置（Vue v-model 协议）
+   * payload: 新的完整 admin 对象
+   * 用法：emit('update:admin', { ...props.admin, 字段: 新值 })
    * 注意：必须展开原对象再覆盖，否则会丢失其他字段
    */
-  'update:webConfig',
+  'update:admin',
 
   /* open-config-file — 用系统默认编辑器打开配置文件 */
   'open-config-file',
@@ -423,7 +438,7 @@ onMounted(() => requestAnimationFrame(() => { showDesc.value = true }))
  *
  * 注意：
  *   - 当前父组件的重置逻辑尚未实现（标记 TODO），emit 后仅关闭对话框。
- *   - 不要在此函数中直接修改 props.webConfig，
+ *   - 不要在此函数中直接修改 props.admin，
  *     重置逻辑应由父组件统一处理。
  */
 
@@ -452,12 +467,12 @@ function confirmReset() {
  *      → 主进程调用 Electron dialog.showOpenDialog()，筛选 .exe 文件
  *      → 返回选中文件的完整路径（用户取消则返回 null）
  *   2. 如果选中了文件（filePath 不为 null/空）：
- *      emit('update:webConfig', { ...props.webConfig, adminAutoStartPath: filePath })
- *      → 将路径更新到 webConfig.adminAutoStartPath
+ *      emit('update:admin', { ...props.admin, adminAutoStartPath: filePath })
+ *      → 将路径更新到 admin.adminAutoStartPath
  *
  * 注意：
  *   - 这是一个 async 函数，因为 IPC 调用是异步的（需要等待用户操作对话框）
- *   - 使用扩展运算符 ...props.webConfig 创建新对象，
+ *   - 使用扩展运算符 ...props.admin 创建新对象，
  *     确保 Vue 能检测到数据变化（响应式要求）
  *   - 如果用户在对话框中点击"取消"，不做任何操作
  *   - window.configPanelApi 由 preload.js 通过 contextBridge 注入，
@@ -468,7 +483,7 @@ async function pickExePath() {
   const filePath = await window.configPanelApi.pickExeFile()
   // 用户取消选择时 filePath 为 null，跳过更新
   if (filePath) {
-    emit('update:webConfig', { ...props.webConfig, adminAutoStartPath: filePath })
+    emit('update:admin', { ...props.admin, adminAutoStartPath: filePath })
   }
 }
 </script>

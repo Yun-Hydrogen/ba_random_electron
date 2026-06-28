@@ -6,6 +6,7 @@
   功能概述：
     1. 面板外观 —— 背景颜色 / 边框颜色 / 面板透明度
     2. 音效设置 —— 抽卡音效开关 & 音量 / 抽卡音乐开关 & 音量
+    3. BGM 设置 —— 播放起始位置（0-120s，MM:SS 显示）/ 淡入淡出时长（0.5-5s）
 
   数据流：
     props.pickResult 接收完整配置对象，通过 emit('update:pickResult', newObj) 回传
@@ -14,7 +15,9 @@
 
   注意事项：
     - 面板透明度存储为 0-1 小数，UI 显示 0-100%
-    - 颜色选择器复用与悬浮按钮 Tab 相同的自定义调色盘组件
+    - 颜色选择器为独立 HSV 风格调色盘（与 TabFloating 共享相同算法）
+    - BGM 起始位置以秒存储（0-120），UI 通过 formatTime() 显示 MM:SS 格式
+    - BGM 淡入淡出时长范围 0.5-5s，步长 0.5s，滑条填充需适配（×20 映射到 10-100）
     - 所有滑条需要轨道填充(rangeFill)
 -->
 
@@ -109,6 +112,28 @@
           <span>{{ pickResult.musicVolume || 60 }}%</span>
         </div>
       </div>
+
+      <div class="cfg-row">
+        <div class="cfg-label-col">
+          <label>播放起始位置</label>
+          <span class="cfg-hint-text">BGM 从指定秒数开始播放（{{ formatTime(pickResult.bgmStartTime || 0) }}）</span>
+        </div>
+        <div class="cfg-slider">
+          <input type="range" min="0" max="120" step="1" :value="pickResult.bgmStartTime || 0" @input="$emit('update:pickResult',{...pickResult,bgmStartTime:parseInt($event.target.value)})" :style="rangeFill(pickResult.bgmStartTime || 0, 0, 120)" />
+          <span>{{ pickResult.bgmStartTime || 0 }}s</span>
+        </div>
+      </div>
+
+      <div class="cfg-row">
+        <div class="cfg-label-col">
+          <label>淡入淡出时长</label>
+          <span class="cfg-hint-text">BGM 开始和结束时的渐变过渡秒数</span>
+        </div>
+        <div class="cfg-slider">
+          <input type="range" min="0.5" max="5" step="0.5" :value="pickResult.bgmFadeDuration || 1.5" @input="$emit('update:pickResult',{...pickResult,bgmFadeDuration:parseFloat($event.target.value)})" :style="rangeFill((pickResult.bgmFadeDuration || 1.5) * 20, 10, 100)" />
+          <span>{{ (pickResult.bgmFadeDuration || 1.5).toFixed(1) }}s</span>
+        </div>
+      </div>
     </div>
 
     <!-- 颜色选择器 Dialog -->
@@ -146,6 +171,14 @@ onMounted(() => requestAnimationFrame(() => { showDesc.value = true }))
 const opacityPercent = computed(() => Math.round((props.pickResult.panelOpacity || 0.9) * 100))
 function setOpacity(e) {
   emit('update:pickResult', { ...props.pickResult, panelOpacity: parseInt(e.target.value) / 100 })
+}
+
+/* 秒数 → MM:SS 格式化 */
+function formatTime(sec) {
+  const s = Math.max(0, Math.round(sec || 0))
+  const m = Math.floor(s / 60)
+  const rs = s % 60
+  return `${m}:${String(rs).padStart(2, '0')}`
 }
 
 /* 滑条轨道填充 */
@@ -190,8 +223,37 @@ function hexToHsl(hex) {
   return { h: h2, s: Math.round(s2 * 100), l: Math.round(l * 100) }
 }
 
-function syncFromHex(hex) { const hsl = hexToHsl(hex); hueVal.value = hsl.h; svX.value = hsl.s; svY.value = 100 - hsl.l }
-function updateColor() { tempColor.value = hslToHex(hueVal.value, svX.value, 100 - svY.value) }
+/*
+ *  syncFromHex — hex → HSV 面板坐标（与 TabFloating 相同的正确公式）。
+ *
+ *  面板背景为 white→pure-hue(L=50) 横向渐变 + 黑色纵向叠加。
+ *  坐标 → 颜色的映射见 updateColor 中的推导。
+ *  反向：svX = S, svY = 100 - L×100/(100 - S×0.5)
+ */
+function syncFromHex(hex) {
+  const hsl = hexToHsl(hex)
+  hueVal.value = hsl.h
+  svX.value = hsl.s
+  const denom = 100 - hsl.s * 0.5
+  svY.value = denom > 0
+    ? Math.max(0, Math.min(100, Math.round(100 - hsl.l * 100 / denom)))
+    : 0
+}
+
+/*
+ *  updateColor — HSV 面板坐标 → hex 颜色（与 TabFloating 相同的正确公式）。
+ *
+ *  公式推导（面板几何）：
+ *    基础色（顶部无黑色叠加）：S = svX, L_base = 100 - svX×0.5
+ *    叠加黑色（svY 分量）：L = L_base × (100 - svY) / 100
+ *    即：L = (100 - svX×0.5) × (100 - svY) / 100
+ */
+function updateColor() {
+  const s = svX.value
+  const baseL = 100 - s * 0.5
+  const l = Math.round(baseL * (100 - svY.value) / 100)
+  tempColor.value = hslToHex(hueVal.value, s, l)
+}
 
 function openPicker(target) {
   pickerTarget.value = target
