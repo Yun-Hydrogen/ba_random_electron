@@ -739,7 +739,7 @@ watch(() => props.fb.borderColor, (c) => {
 }
 .color-swatch:hover { border-color: #39c5bb; box-shadow: 0 0 0 3px rgba(57,197,187,0.12); }
 .color-swatch-preview { width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.08); flex-shrink: 0; }
-.color-swatch-value { font-size: 12px; color: #556; font-family: 'SF Mono','Consolas',monospace; }
+.color-swatch-value { font-size: 12px; color: #556; font-family: 'UI', 'Bahnschrift', 'Microsoft YaHei UI', sans-serif; }
 
 /* 调色盘 Dialog 遮罩 */
 .color-dialog-overlay {
@@ -815,7 +815,7 @@ watch(() => props.fb.borderColor, (c) => {
 /* 底部 */
 .cp-footer { display: flex; align-items: center; gap: 10px; }
 .cp-preview-dot { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.08); flex-shrink: 0; }
-.cp-hex-input { flex: 1; text-align: center; }
+.cp-hex-input { flex: 1; text-align: center; font-family: 'UI', 'Bahnschrift', 'Microsoft YaHei UI', sans-serif; }
 .btn-sm { padding: 5px 14px; font-size: 11px; }
 .cfg-hint {
   font-size: 12px;

@@ -408,7 +408,7 @@ onBeforeUnmount(() => { document.removeEventListener('mousemove', onMove); docum
 .color-swatch-hex {
   font-size: 12px;
   color: #556;
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: 'UI', 'Bahnschrift', 'Microsoft YaHei UI', sans-serif;
 }
 
 /* ===== Switch 开关 ===== */

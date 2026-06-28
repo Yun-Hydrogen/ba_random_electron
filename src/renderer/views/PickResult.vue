@@ -399,17 +399,33 @@ function handleKeydown(event) {
  * 关闭结果面板。
  *
  * 流程：
- *   1. 进入 closing 阶段（触发淡出动画）
- *   2. 取消所有进行中的动画计时器
- *   3. 220ms 后（淡出动画完成）：
- *      a. 重置所有状态（停止音效/BGM）
+ *   1. 立即停止 BGM 淡出（与面板 CSS 淡出同步开始）
+ *   2. 进入 closing 阶段（触发面板 CSS 淡出动画）
+ *   3. 取消所有进行中的动画计时器
+ *   4. 220ms 后（面板淡出动画完成）：
+ *      a. 停止抽卡音效 + 重置状态
  *      b. 等待 Vue DOM 更新 + 一个动画帧
  *      c. 通知主进程关闭窗口
+ *
+ * 时序说明：
+ *   BGM 的 setTimeout 淡出不受窗口可见性影响（之前已验证）。
+ *   面板 CSS 淡出 220ms，BGM 淡出时长由 bgmFadeDuration 配置（默认 1.5s）。
+ *   BGM 淡出在窗口关闭后仍会继续完成（Audio 对象 + setTimeout 独立于 DOM）。
  *
  * 使用 sessionId 防御：如果 220ms 内新会话启动，取消关闭。
  */
 async function closeResult() {
   if (isClosing.value) return
+
+  /*
+   * 立即开始 BGM 淡出，与面板 CSS 淡出同步。
+   *
+   * 必须在 stagePhase = 'closing' 之前调用，
+   * 因为 stopBgm() 内部使用 setTimeout 链（不受 CSS 动画影响），
+   * 尽早调用可以让音频淡出和视觉淡出在时间轴上对齐。
+   */
+  stopBgm()
+
   stagePhase.value = 'closing'
   canClose.value = false
   const sessionId = activeSessionId
@@ -418,7 +434,12 @@ async function closeResult() {
 
   closeFadeTimer = setTimeout(async () => {
     if (sessionId !== activeSessionId || stagePhase.value !== 'closing') return
-    resetResultState({ stopSound: true, clearResults: true })
+    /*
+     * stopSound: false —— BGM 已在上面 stopBgm() 中开始淡出，不需要再停一次。
+     * 只需停止抽卡音效（stopGachaLoadingSound）。
+     */
+    resetResultState({ stopSound: false, clearResults: true })
+    stopGachaLoadingSound()
     await nextTick()
     await new Promise((resolve) => window.requestAnimationFrame(resolve))
     if (window.pickResultApi) window.pickResultApi.close()
