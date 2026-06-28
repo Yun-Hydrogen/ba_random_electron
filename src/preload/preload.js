@@ -416,5 +416,13 @@ contextBridge.exposeInMainWorld('configPanelApi', {
   pickExeFile: () => ipcRenderer.invoke('config-panel:pick-exe-file'),
 
   /* 重置所有配置为 DEFAULT_CONFIG 并写入磁盘 */
-  resetConfig: () => ipcRenderer.invoke('config-panel:reset-config')
+  resetConfig: () => ipcRenderer.invoke('config-panel:reset-config'),
+
+  /*
+   * 从磁盘日志文件拉取最近 N 条日志
+   *
+   * maxLines — 可选，最多返回的行数（默认 500）
+   * 返回值：日志条目数组（时间倒序，最新在前）
+   */
+  getLogs: (maxLines) => ipcRenderer.invoke('config-panel:get-logs', maxLines)
 })

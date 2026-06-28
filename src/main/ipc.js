@@ -45,6 +45,7 @@ const config = require('./config');
 const windows = require('./windows');
 const admin = require('./admin');
 const update = require('./update');
+const logging = require('./logging');
 
 
 // ============================================================================
@@ -346,6 +347,18 @@ function registerConfigPanelIpc() {
     config.saveConfig(config.normalizeConfig({}));
     windows.refreshFloatingButtonWindow();
     return { ok: true };
+  });
+
+  /*
+   *  config-panel:get-logs
+   *  方向：渲染 → 主（请求-响应）
+   *  用途：配置面板 > 日志 Tab 拉取磁盘日志文件内容。
+   *  参数：maxLines（可选）— 最多返回的行数，默认 500。
+   *  返回：日志条目数组（时间倒序，最新在前）。
+   *  竞态保护：读取前等待所有待处理写入完成（logging 模块内部互斥锁）。
+   */
+  ipcMain.handle('config-panel:get-logs', async (_event, maxLines) => {
+    return logging.getLogs(typeof maxLines === 'number' ? maxLines : 500);
   });
 }
 

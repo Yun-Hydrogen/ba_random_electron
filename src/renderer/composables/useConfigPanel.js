@@ -497,6 +497,31 @@ export function useConfigPanel() {
     if (window.configPanelApi) window.configPanelApi.openConfigDir?.()
   }
 
+  /*
+   * fetchLogs(maxLines) —— 从主进程拉取磁盘日志文件内容。
+   *
+   * 这是 TabLogs 组件的核心数据源。替代了旧的 SSE 方案。
+   *
+   * 参数：
+   *   maxLines — 最多返回的行数（可选，默认 500）
+   *
+   * 返回值：Promise<Array<logEntry>>
+   *   日志条目数组，按时间倒序（最新的在前）。
+   *   如果 IPC 不可用（非 Electron 环境），返回空数组。
+   *
+   * 竞态保护：
+   *   主进程端（logging.js）在读取前会等待所有待处理写入完成，
+   *   确保读到的内容包含之前所有 pushLog 的数据。
+   */
+  async function fetchLogs(maxLines) {
+    if (!window.configPanelApi?.getLogs) return []
+    try {
+      return await window.configPanelApi.getLogs(maxLines)
+    } catch {
+      return []
+    }
+  }
+
   // ---- 更新检查状态 ----
   /*
    * 更新检查相关状态：
@@ -695,7 +720,7 @@ export function useConfigPanel() {
   //    标签导航    → tabs, activeTab, switchTab, updateSlider, sliderStyle ...
   //    状态数据    → draft, appInfo, loading
   //    芯片提示    → tooltip, showChipTooltip, hideChipTooltip
-  //    IPC 操作    → 9 个 async 函数
+  //    IPC 操作    → 10 个 async 函数（含 fetchLogs）
   //    关闭/应用   → isClosing, closeWithAnimation, handleCancel, handleApply
   //    主题样式    → panelBorderStyle, applyBtnStyle, trackBorderStyle, tabItemStyle
   //    更新检查    → updateLoading, updateStatus, updateTitle, updateDetail, checkUpdate
@@ -729,6 +754,7 @@ export function useConfigPanel() {
     createStartupTask,
     resetConfig,
     showInExplorer,
+    fetchLogs,
 
     /* ---- 更新检查 ---- */
     updateLoading,

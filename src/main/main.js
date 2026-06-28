@@ -169,6 +169,15 @@ ipc.registerIpcHandlers();
 app.whenReady().then(() => {
   const startupConfig = config.refreshConfig();
 
+  /*
+   * 初始化日志文件。
+   *
+   * 每次启动清空 log.txt，确保日志只反映"本次运行"的内容。
+   * 必须在 app.getPath('userData') 可用后调用（即 app.whenReady() 之后）。
+   * 放在 refreshConfig() 之后，以便日志系统记录配置加载过程中的输出。
+   */
+  logging.initLogFile();
+
   // --------------------------------------------------------------------------
   //  第 1 步：检查是否需要 UIAccess 提权重启
   //

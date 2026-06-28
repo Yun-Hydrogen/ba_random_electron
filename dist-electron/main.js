@@ -3,10 +3,10 @@ var __commonJSMin = (cb, mod) => () => (mod || cb((mod = { exports: {} }).export
 //#endregion
 //#region src/main/admin.js
 var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$4 } = require("electron");
+	var { app: app$5 } = require("electron");
 	var { execFileSync, spawnSync } = require("child_process");
-	var fs$3 = require("fs");
-	var path$3 = require("path");
+	var fs$4 = require("fs");
+	var path$4 = require("path");
 	var IS_WINDOWS = process.platform === "win32";
 	var ADMIN_TASK_DEFAULT_NAME = "Blue Random (Admin)";
 	var USERDATA_DIR_NAME = "BlueRandom";
@@ -14,10 +14,10 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var IS_UIACCESS_PROCESS = process.argv.includes(UIACCESS_ARG);
 	function configureUserDataPath() {
 		if (!IS_WINDOWS) return;
-		const appData = app$4.getPath("appData");
-		const localRoot = path$3.resolve(appData, "..", "Local");
-		const targetPath = path$3.join(localRoot, USERDATA_DIR_NAME);
-		app$4.setPath("userData", targetPath);
+		const appData = app$5.getPath("appData");
+		const localRoot = path$4.resolve(appData, "..", "Local");
+		const targetPath = path$4.join(localRoot, USERDATA_DIR_NAME);
+		app$5.setPath("userData", targetPath);
 	}
 	function quoteForPowerShell(text) {
 		return String(text).replace(/'/g, "''");
@@ -25,14 +25,14 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function getPowerShellPath() {
 		if (!IS_WINDOWS) return "powershell";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
-		const psPath = path$3.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-		return fs$3.existsSync(psPath) ? psPath : "powershell";
+		const psPath = path$4.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+		return fs$4.existsSync(psPath) ? psPath : "powershell";
 	}
 	function getRundll32Path() {
 		if (!IS_WINDOWS) return "rundll32.exe";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
-		const dllPath = path$3.join(root, "System32", "rundll32.exe");
-		return fs$3.existsSync(dllPath) ? dllPath : "rundll32.exe";
+		const dllPath = path$4.join(root, "System32", "rundll32.exe");
+		return fs$4.existsSync(dllPath) ? dllPath : "rundll32.exe";
 	}
 	function buildUiAccessCommandLine(exePath, args) {
 		const quote = (value) => `"${String(value).replace(/"/g, "\\\"")}"`;
@@ -88,27 +88,27 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 	}
 	function getDefaultExePath() {
-		return app$4.getPath("exe");
+		return app$5.getPath("exe");
 	}
 	function getDefaultUiAccessDllPath() {
-		const exeDir = path$3.dirname(getDefaultExePath());
-		return path$3.join(exeDir, "uiaccess.dll");
+		const exeDir = path$4.dirname(getDefaultExePath());
+		return path$4.join(exeDir, "uiaccess.dll");
 	}
 	function requestUiAccessRelaunch(uiAccessDllPath) {
 		if (!IS_WINDOWS) return {
 			ok: false,
 			message: "当前系统不支持 UIAccess。"
 		};
-		if (!app$4.isPackaged) return {
+		if (!app$5.isPackaged) return {
 			ok: false,
 			message: "UIAccess 仅支持正式版运行。"
 		};
-		if (!uiAccessDllPath || !fs$3.existsSync(uiAccessDllPath)) return {
+		if (!uiAccessDllPath || !fs$4.existsSync(uiAccessDllPath)) return {
 			ok: false,
 			message: "未找到 uiaccess.dll，请检查路径。"
 		};
 		const exePath = getDefaultExePath();
-		const exeDir = path$3.dirname(exePath);
+		const exeDir = path$4.dirname(exePath);
 		const baseArgs = process.argv.slice(1);
 		const cmdLine = buildUiAccessCommandLine(exePath, baseArgs.includes(UIACCESS_ARG) ? baseArgs : [...baseArgs, UIACCESS_ARG]);
 		const entry = `${uiAccessDllPath},run`;
@@ -156,7 +156,7 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			ok: false,
 			message: "仅支持 Windows 计划任务。"
 		};
-		if (!exePath || !fs$3.existsSync(exePath)) return {
+		if (!exePath || !fs$4.existsSync(exePath)) return {
 			ok: false,
 			message: "可执行文件路径无效或不存在。"
 		};
@@ -2357,9 +2357,9 @@ var require_js_yaml = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/config.js
 var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$3, shell: shell$1 } = require("electron");
-	var fs$2 = require("fs");
-	var path$2 = require("path");
+	var { app: app$4, shell: shell$1 } = require("electron");
+	var fs$3 = require("fs");
+	var path$3 = require("path");
 	var yaml = require_js_yaml();
 	var admin = require_admin();
 	var DEFAULT_CONFIG = {
@@ -2465,20 +2465,20 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 	}
 	function getConfigPath() {
-		return path$2.join(app$3.getPath("userData"), "config.yml");
+		return path$3.join(app$4.getPath("userData"), "config.yml");
 	}
 	function getConfigDir() {
-		return path$2.dirname(getConfigPath());
+		return path$3.dirname(getConfigPath());
 	}
 	function getLegacyConfigPaths() {
 		const legacyPaths = [];
-		const exeDir = path$2.dirname(app$3.getPath("exe"));
-		legacyPaths.push(path$2.join(exeDir, "config.yml"));
-		if (!app$3.isPackaged) legacyPaths.push(path$2.join(process.cwd(), "config.yml"));
+		const exeDir = path$3.dirname(app$4.getPath("exe"));
+		legacyPaths.push(path$3.join(exeDir, "config.yml"));
+		if (!app$4.isPackaged) legacyPaths.push(path$3.join(process.cwd(), "config.yml"));
 		if (admin.IS_WINDOWS) {
-			const appData = app$3.getPath("appData");
-			const localRoot = path$2.resolve(appData, "..", "Local");
-			legacyPaths.push(path$2.join(localRoot, "Blue Random", "config.yml"));
+			const appData = app$4.getPath("appData");
+			const localRoot = path$3.resolve(appData, "..", "Local");
+			legacyPaths.push(path$3.join(localRoot, "Blue Random", "config.yml"));
 		}
 		const currentPath = getConfigPath();
 		return Array.from(new Set(legacyPaths.filter((p) => p && p !== currentPath)));
@@ -2567,14 +2567,14 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function saveConfig(config) {
 		const configPath = getConfigPath();
 		const yamlText = toConfigYamlWithComments(config);
-		fs$2.mkdirSync(path$2.dirname(configPath), { recursive: true });
-		fs$2.writeFileSync(configPath, yamlText, "utf8");
+		fs$3.mkdirSync(path$3.dirname(configPath), { recursive: true });
+		fs$3.writeFileSync(configPath, yamlText, "utf8");
 	}
 	function writeDefaultConfigIfMissing(configPath) {
-		if (fs$2.existsSync(configPath)) return;
-		for (const legacyPath of getLegacyConfigPaths()) if (fs$2.existsSync(legacyPath)) {
-			fs$2.mkdirSync(path$2.dirname(configPath), { recursive: true });
-			fs$2.copyFileSync(legacyPath, configPath);
+		if (fs$3.existsSync(configPath)) return;
+		for (const legacyPath of getLegacyConfigPaths()) if (fs$3.existsSync(legacyPath)) {
+			fs$3.mkdirSync(path$3.dirname(configPath), { recursive: true });
+			fs$3.copyFileSync(legacyPath, configPath);
 			return;
 		}
 		saveConfig(DEFAULT_CONFIG);
@@ -2583,7 +2583,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const configPath = getConfigPath();
 		writeDefaultConfigIfMissing(configPath);
 		try {
-			const raw = fs$2.readFileSync(configPath, "utf8");
+			const raw = fs$3.readFileSync(configPath, "utf8");
 			const normalized = normalizeConfig(yaml.load(raw));
 			saveConfig(normalized);
 			return normalized;
@@ -2612,7 +2612,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	}
 	async function openConfigDir() {
 		const configDir = getConfigDir();
-		fs$2.mkdirSync(configDir, { recursive: true });
+		fs$3.mkdirSync(configDir, { recursive: true });
 		const result = await shell$1.openPath(configDir);
 		if (result) return {
 			ok: false,
@@ -2641,7 +2641,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region src/main/windows.js
 var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { BrowserWindow: BrowserWindow$1, screen, shell } = require("electron");
-	var path$1 = require("path");
+	var path$2 = require("path");
 	var config = require_config();
 	var dragSessions = /* @__PURE__ */ new Map();
 	var floatingButtonWindow = null;
@@ -2829,7 +2829,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			type: isDebugMode ? void 0 : "toolbar",
 			focusable: isDebugMode ? true : process.platform !== "win32",
 			webPreferences: {
-				preload: path$1.join(__dirname, "preload.js"),
+				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
 				nodeIntegration: false,
 				autoplayPolicy: "no-user-gesture-required"
@@ -2848,7 +2848,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(process.env.VITE_DEV_SERVER_URL);
 		else {
 			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
-			win.loadFile(path$1.join(__dirname, "../dist/index.html"));
+			win.loadFile(path$2.join(__dirname, "../dist/index.html"));
 		}
 		win.webContents.on("context-menu", (event) => event.preventDefault());
 		win.on("hide", () => {
@@ -2921,7 +2921,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			alwaysOnTop: true,
 			skipTaskbar: !isDebugMode,
 			webPreferences: {
-				preload: path$1.join(__dirname, "preload.js"),
+				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
 				nodeIntegration: false,
 				autoplayPolicy: "no-user-gesture-required"
@@ -2931,7 +2931,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		isPickResultWindowReady = false;
 		win.setMenuBarVisibility(false);
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pick-result`);
-		else win.loadURL(`file://${path$1.join(__dirname, "../dist/index.html")}#/pick-result`);
+		else win.loadURL(`file://${path$2.join(__dirname, "../dist/index.html")}#/pick-result`);
 		if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 		win.once("ready-to-show", () => {
 			isPickResultWindowReady = true;
@@ -3071,7 +3071,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			alwaysOnTop: true,
 			skipTaskbar: !isDebugMode,
 			webPreferences: {
-				preload: path$1.join(__dirname, "preload.js"),
+				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
 				nodeIntegration: false
 			}
@@ -3088,7 +3088,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 		});
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
-		else win.loadURL(`file://${path$1.join(__dirname, "../dist/index.html")}#/config-panel`);
+		else win.loadURL(`file://${path$2.join(__dirname, "../dist/index.html")}#/config-panel`);
 		win.on("closed", () => {
 			configPanelWindow = null;
 			fadeInFloatingButtonWindow();
@@ -3136,7 +3136,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/update.js
 var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$2, net } = require("electron");
+	var { app: app$3, net } = require("electron");
 	function parseVersionYaml(text) {
 		const lines = String(text || "").split(/\r?\n/);
 		const data = {};
@@ -3192,7 +3192,7 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const repoOwner = "Yun-Hydrogen";
 		const repoName = "ba_random_electron";
 		const debug = [];
-		const localVersion = app$2.getVersion();
+		const localVersion = app$3.getVersion();
 		const releaseApi = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
 		debug.push(`GET ${releaseApi}`);
 		const releaseResp = await fetchUrl(releaseApi);
@@ -3282,6 +3282,104 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = { checkUpdateFromMain };
 }));
 //#endregion
+//#region src/main/logging.js
+var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var fs$2 = require("fs");
+	var path$1 = require("path");
+	var { app: app$2 } = require("electron");
+	var _logFilePath = null;
+	function getLogFilePath() {
+		if (!_logFilePath) _logFilePath = path$1.join(app$2.getPath("userData"), "log.txt");
+		return _logFilePath;
+	}
+	function initLogFile() {
+		const p = getLogFilePath();
+		const dir = path$1.dirname(p);
+		if (!fs$2.existsSync(dir)) fs$2.mkdirSync(dir, { recursive: true });
+		fs$2.writeFileSync(p, "", "utf8");
+	}
+	var LOG_BUFFER_LIMIT = 600;
+	var logBuffer = [];
+	var writeQueue = Promise.resolve();
+	function pushLog(level, text) {
+		const time = (/* @__PURE__ */ new Date()).toISOString();
+		const entry = {
+			id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+			level,
+			text: String(text),
+			time
+		};
+		logBuffer.push(entry);
+		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
+		const line = JSON.stringify(entry) + "\n";
+		writeQueue = writeQueue.then(() => {
+			return new Promise((resolve) => {
+				fs$2.appendFile(getLogFilePath(), line, "utf8", (err) => {
+					if (err) (console.error.bind ? console.error.bind(console) : console.error)("[logging] 日志写入磁盘失败:", err.message);
+					resolve();
+				});
+			});
+		});
+	}
+	function getLogs(maxLines = 500) {
+		return writeQueue.then(() => {
+			return new Promise((resolve) => {
+				fs$2.readFile(getLogFilePath(), "utf8", (err, data) => {
+					if (err) return resolve([]);
+					const recent = data.split("\n").filter((line) => line.trim()).slice(-maxLines);
+					const entries = [];
+					for (const line of recent) try {
+						entries.push(JSON.parse(line));
+					} catch (_) {}
+					entries.reverse();
+					resolve(entries);
+				});
+			});
+		});
+	}
+	function attachConsoleLogger() {
+		[
+			"log",
+			"info",
+			"warn",
+			"error"
+		].forEach((method) => {
+			const original = console[method].bind(console);
+			console[method] = (...args) => {
+				const text = args.map((arg) => {
+					if (typeof arg === "string") return arg;
+					try {
+						return JSON.stringify(arg);
+					} catch (_error) {
+						return String(arg);
+					}
+				}).join(" ");
+				pushLog(method === "log" ? "info" : method, text);
+				original(...args);
+			};
+		});
+	}
+	function registerRendererLogIpc(ipcMain) {
+		ipcMain.on("renderer:log", (_event, payload) => {
+			if (!payload || typeof payload.text !== "string") return;
+			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
+		});
+	}
+	function registerGetLogsIpc(ipcMain) {
+		ipcMain.handle("config-panel:get-logs", async (_event, maxLines) => {
+			return getLogs(typeof maxLines === "number" ? maxLines : 500);
+		});
+	}
+	module.exports = {
+		initLogFile,
+		attachConsoleLogger,
+		pushLog,
+		getLogs,
+		registerRendererLogIpc,
+		registerGetLogsIpc
+	};
+}));
+//#endregion
 //#region src/main/ipc.js
 var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { ipcMain: ipcMain$1, app: app$1, dialog } = require("electron");
@@ -3290,6 +3388,7 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var windows = require_windows();
 	var admin = require_admin();
 	var update = require_update();
+	var logging = require_logging();
 	function registerIpcHandlers() {
 		ipcMain$1.handle("floating-button:get-config", () => {
 			return config.refreshConfig().floatingButton;
@@ -3406,60 +3505,13 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			windows.refreshFloatingButtonWindow();
 			return { ok: true };
 		});
+		ipcMain$1.handle("config-panel:get-logs", async (_event, maxLines) => {
+			return logging.getLogs(typeof maxLines === "number" ? maxLines : 500);
+		});
 	}
 	module.exports = {
 		registerIpcHandlers,
 		registerConfigPanelIpc
-	};
-}));
-//#endregion
-//#region src/main/logging.js
-var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var LOG_BUFFER_LIMIT = 600;
-	var logBuffer = [];
-	function pushLog(level, text) {
-		const time = (/* @__PURE__ */ new Date()).toISOString();
-		const entry = {
-			id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-			level,
-			text: String(text),
-			time
-		};
-		logBuffer.push(entry);
-		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
-	}
-	function attachConsoleLogger() {
-		[
-			"log",
-			"info",
-			"warn",
-			"error"
-		].forEach((method) => {
-			const original = console[method].bind(console);
-			console[method] = (...args) => {
-				const text = args.map((arg) => {
-					if (typeof arg === "string") return arg;
-					try {
-						return JSON.stringify(arg);
-					} catch (_error) {
-						return String(arg);
-					}
-				}).join(" ");
-				pushLog(method === "log" ? "info" : method, text);
-				original(...args);
-			};
-		});
-	}
-	function registerRendererLogIpc(ipcMain) {
-		ipcMain.on("renderer:log", (_event, payload) => {
-			if (!payload || typeof payload.text !== "string") return;
-			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
-		});
-	}
-	module.exports = {
-		attachConsoleLogger,
-		pushLog,
-		registerRendererLogIpc
 	};
 }));
 //#endregion
@@ -3531,6 +3583,7 @@ process.on("unhandledRejection", (reason) => {
 ipc.registerIpcHandlers();
 app.whenReady().then(() => {
 	const startupConfig = config.refreshConfig();
+	logging.initLogFile();
 	if (startupConfig.admin && startupConfig.admin.uiAccessEnabled && admin.IS_WINDOWS && !admin.IS_UIACCESS_PROCESS) {
 		if (admin.isProcessElevated()) {
 			const dllPath = admin.getDefaultUiAccessDllPath();

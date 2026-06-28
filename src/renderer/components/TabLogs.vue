@@ -1,30 +1,73 @@
-<!--
+/*
+================================================================================
   组件：TabLogs.vue
-  所属：配置面板 - 日志输出 Tab
+  所属：配置面板 — 日志输出 Tab
   父组件：ConfigPanel.vue（通过 props 传入应用信息）
 
-  功能概述：
-    1. 实时日志流 —— 通过 SSE（Server-Sent Events）连接到主进程的 /api/logs 端点
-    2. 日志展示 —— 按时间倒序显示，最新日志在最上方
-    3. 日志清空 —— 一键清除当前显示的所有日志
+================================================================================
+  一、功能概述
+================================================================================
 
-  数据流：
-    父组件传入 appInfo（包含 isAdmin、isUiAccess、version 等只读信息）
-    日志数据完全由本组件内部管理，不需要向父组件回传
-    SSE 连接在组件挂载时建立，卸载时关闭，防止内存泄漏
+  1. 日志拉取 —— 通过 IPC 轮询主进程的磁盘日志文件（log.txt）
+     替代了旧的 SSE 方案（SSE 服务端 config-server.js 已于 2026-06-28 删除）
 
-  日志级别与颜色对照：
-    info    → 时间青色 #99ccdd，消息深灰 #556
-    warn    → 时间琥珀 #e8a840，消息棕色 #a07030
-    error   → 时间红色 #e05555，消息红色 #c04040
-    success → 时间绿色 #55b888，消息绿色 #3a8050
+  2. 日志展示 —— 按时间倒序显示，最新日志在最上方
 
-  注意事项：
-    - 日志最多保留 200 条，超出时自动丢弃最旧的
-    - SSE 连接断开后需要手动刷新页面重连（当前未实现自动重连）
-    - 日志内容在接收到时解析 JSON，解析失败则静默丢弃
-    - 组件卸载时必须关闭 SSE 连接，否则会泄漏
--->
+  3. 日志清空 —— 一键清除当前显示的所有日志（仅清空前端数组，不影响磁盘文件）
+
+================================================================================
+  二、为什么用 IPC 轮询替代 SSE
+================================================================================
+
+  旧版问题：
+    - SSE 端点 /api/logs 由 config-server.js（HTTP 服务器）提供
+    - config-server.js 已于 2026-06-28 删除（被原生 IPC 配置面板取代）
+    - 管理员模式下，新进程有独立内存空间，in-memory buffer 不共享
+
+  新方案：
+    ┌──────────────┐   每 800ms 轮询     ┌──────────────┐
+    │  TabLogs.vue  │ ──configPanelApi──→ │  主进程       │
+    │  (渲染进程)    │ ←───getLogs()────── │  logging.js   │
+    │               │                    │  ↓            │
+    │  logs.value   │   返回日志数组      │  readFile()   │
+    │  = 最新 200 条 │                    │  log.txt      │
+    └──────────────┘                    └──────────────┘
+
+  轮询参数：
+    - 间隔：800ms（足够实时，不会造成 CPU 负担）
+    - 每次拉取最近 500 条（后端限制）
+    - 前端最多显示 200 条（UI 性能考虑）
+    - 通过 lastLogId 去重，避免重复渲染
+
+  竞态保护：
+    - 主进程端：读取前等待所有待处理写入完成（Promise 链互斥锁）
+    - 渲染端：通过 lastLogId 比对，只更新增量日志
+    - 轮询回调只保留最新一次的结果（忽略过期响应）
+
+================================================================================
+  三、日志级别与颜色对照
+================================================================================
+
+  level   | 时间颜色   | 消息颜色
+  ────────┼────────────┼──────────
+  info    | #99ccdd 青 | #556 深灰
+  warn    | #e8a840 琥珀| #a07030 棕
+  error   | #e05555 红 | #c04040 红
+  success | #55b888 绿 | #3a8050 绿
+
+================================================================================
+  四、维护注意事项
+================================================================================
+
+  - 日志轮询间隔（POLL_INTERVAL）可调整，但不应低于 500ms
+  - 前端最多显示 200 条（MAX_DISPLAY），超出自动截断
+  - 清空按钮只清空前端显示，不影响磁盘日志文件
+  - 组件卸载时必须 clearInterval 停止轮询
+  - 如果 preload API 不可用（非 Electron 环境），静默降级显示"暂无日志"
+
+  最后更新：2026-06-28
+================================================================================
+*/
 
 <template>
   <div class="tab-page">
@@ -39,7 +82,12 @@
       </div>
       <div class="log-list">
         <div v-if="logs.length === 0" class="log-empty">暂无日志</div>
-        <div v-for="item in logs" :key="item.id" class="log-row" :class="'log-' + item.level">
+        <div
+          v-for="item in logs"
+          :key="item.id"
+          class="log-row"
+          :class="'log-' + item.level"
+        >
           <span class="log-time">{{ item.time }}</span>
           <span class="log-msg">{{ item.text }}</span>
         </div>
@@ -52,10 +100,11 @@
 /*
  *  组件逻辑概览（按代码顺序）：
  *  1. props       —— 接收父组件传入的应用信息
- *  2. 日志存储    —— 日志数组的管理（增/删/限长）
- *  3. SSE 连接    —— 建立与主进程的实时日志推送连接
- *  4. 清空日志    —— 清除所有日志并记录一条清空操作
- *  5. 生命周期    —— 挂载时连接 SSE，卸载时断开
+ *  2. 配置常量    —— 轮询间隔、最大显示条数
+ *  3. 日志存储    —— 日志数组的管理（增/截断/清空）
+ *  4. IPC 轮询    —— 定时拉取磁盘日志文件
+ *  5. 清空日志    —— 清除前端显示（不影响磁盘文件）
+ *  6. 生命周期    —— 挂载时开始轮询，卸载时停止
  */
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 
@@ -68,98 +117,197 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 defineProps({ appInfo: Object })
 
 // ================================================================
-//  1. 日志存储与管理
+//  1. 配置常量
+// ================================================================
+
+/*
+ *  POLL_INTERVAL —— 轮询间隔（毫秒）
+ *
+ *  800ms 是经验和折中：
+ *    - 太短（< 500ms）→ CPU 空转，日志窗口本身不需要毫秒级实时
+ *    - 太长（> 2s）  → 用户感知到延迟，体验下降
+ *    - 800ms 足够实时，且 CPU 占用几乎为零
+ */
+const POLL_INTERVAL = 800
+
+/*
+ *  MAX_DISPLAY —— 前端最多显示的日志条数
+ *
+ *  200 条足够覆盖最近几分钟的日志（正常应用每秒 ~1-3 条日志）。
+ *  超出时自动丢弃最旧的（数组尾部）。
+ */
+const MAX_DISPLAY = 200
+
+// ================================================================
+//  2. 日志存储与管理
 // ================================================================
 
 /*
  *  logs —— 日志数组（响应式），每条日志包含：
- *    id    : 唯一标识（时间戳 + 自增序号，用于 Vue 的 :key）
- *    level : 日志级别（'info' | 'warn' | 'error' | 'success'）
+ *    id    : 唯一标识（来自主进程生成的 ISO 时间戳 + 随机 hex）
+ *    level : 日志级别（'info' | 'warn' | 'error'）
  *    text  : 日志正文
  *    time  : 格式化时间字符串（HH:mm:ss）
+ *
+ *  使用 ref([]) 而非 reactive，因为整个数组会被替换。
  */
 const logs = ref([])
 
 /*
- *  logSeed —— 自增计数器，与时间戳组合生成唯一 ID
- *  用 let 而非 ref，因为这是纯内部状态，不需要触发 UI 更新
+ *  lastLogId —— 上次轮询时最新日志的 ID
+ *
+ *  用于增量更新：下次轮询时，只取 ID 不等于 lastLogId 的新日志。
+ *  避免重复添加已有日志，减少不必要的 Vue 响应式触发。
+ *
+ *  初始为空字符串，首次轮询时加载所有日志。
  */
-let logSeed = 0
+let lastLogId = ''
 
 /*
- *  logSource —— SSE 连接对象引用
- *  存储在模块作用域以便在组件卸载时关闭
+ *  pollTimer —— setInterval 返回的定时器 ID
+ *
+ *  存储在模块作用域以便 onBeforeUnmount 中 clearInterval。
  */
-let logSource = null
-
-/*
- *  向日志列表添加一条新日志
- *  参数 level —— 日志级别字符串
- *  参数 text —— 日志正文
- *  参数 timeOverride —— 可选的时间字符串，不传则自动生成当前时间
- *  新日志插入到数组最前面（unshift），保证最新的在上面
- *  超过 200 条时自动截断，防止内存无限增长
- *  注意：id 由时间戳 + 递增序号组成，确保同一毫秒内多条日志不重复
- */
-function addLog(level, text, timeOverride) {
-  const time = timeOverride || new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  logs.value.unshift({ id: `${Date.now()}-${logSeed++}`, level, text, time })
-  if (logs.value.length > 200) logs.value.length = 200
-}
+let pollTimer = null
 
 // ================================================================
-//  2. SSE 实时日志流
+//  3. IPC 轮询 —— 定时从主进程拉取日志文件
 // ================================================================
 
 /*
- *  建立与主进程的 SSE 连接，接收实时日志推送
- *  连接地址：/api/logs（开发环境通过 Vite 代理转发到 localhost:21219）
- *  每次调用前先关闭已有连接（如果存在），避免重复连接
- *  主进程发送的每条数据都是 JSON 格式：{ level, text, time }
- *  解析失败时静默丢弃（catch 块为空），不影响其他功能
+ *  pollLogs() —— 执行一次日志拉取
+ *
+ *  流程：
+ *    1. 检查 API 可用性（非 Electron 环境静默跳过）
+ *    2. 调用 configPanelApi.getLogs(500) 拉取最近 500 条
+ *    3. 按 id 去重：只保留 id !== lastLogId 的新日志
+ *    4. 更新 lastLogId 为最新日志的 id
+ *    5. 将新日志追加到 logs 头部（unshift）
+ *    6. 截断超出 MAX_DISPLAY 的旧日志
+ *
+ *  竞态保护：
+ *    - 主进程端（logging.js）在读取 log.txt 前等待所有待处理写入完成
+ *    - 本函数是同步风格（async/await），每次只运行一个实例
+ *    - 如果上次 pollLogs 尚未完成，新的 setInterval 回调会在事件队列中等待，
+ *      不会并发执行（JS 单线程）。但如果上次请求卡住 >800ms，
+ *      可能导致多个请求排队。解决方案：用 isPolling 标志跳过排队请求。
+ *
+ *  错误处理：
+ *    - API 不可用 → 静默跳过
+ *    - 网络/ IPC 错误 → try/catch 静默恢复
  */
-function startLogStream() {
-  if (logSource) logSource.close()
-  logSource = new EventSource('/api/logs')
-  logSource.onmessage = (e) => {
-    try {
-      const d = JSON.parse(e.data)
-      addLog(
-        d.level || 'info',
-        d.text || '',
-        d.time ? new Date(d.time).toLocaleTimeString('zh-CN', { hour12: false }) : undefined
-      )
-    } catch {}
+let isPolling = false
+
+async function pollLogs() {
+  /* 跳过并发请求（上一次还未完成） */
+  if (isPolling) return
+  if (!window.configPanelApi?.getLogs) return
+
+  isPolling = true
+  try {
+    const entries = await window.configPanelApi.getLogs(500)
+    if (!Array.isArray(entries) || entries.length === 0) return
+
+    /*
+     * 增量更新：只保留上次未见过的新日志。
+     *
+     * 比较逻辑：
+     *   entries 已按时间倒序（最新在前），从头部开始遍历。
+     *   遇到 id === lastLogId 时停止（说明后面的都见过了）。
+     *   收集所有新条目后，更新 lastLogId 为 entries[0].id。
+     *
+     * 首次轮询：lastLogId === ''，所以 entries[0].id !== '' 为 true，
+     *   会加载所有日志。加载完后 lastLogId 被设为 entries[0].id。
+     */
+    const newEntries = []
+    for (const entry of entries) {
+      if (entry.id === lastLogId) break
+      newEntries.push(entry)
+    }
+
+    if (newEntries.length === 0) return
+
+    /* 更新 lastLogId 为最新日志的 ID */
+    lastLogId = entries[0].id
+
+    /*
+     * 格式化时间 + 追加到前端数组
+     *
+     * 主进程存储的 time 是 ISO 8601 格式（如 "2026-06-28T12:00:00.000Z"），
+     * 这里转为本地时间 HH:mm:ss 显示。
+     */
+    for (const entry of newEntries) {
+      const displayTime = entry.time
+        ? new Date(entry.time).toLocaleTimeString('zh-CN', { hour12: false })
+        : '--:--:--'
+      logs.value.unshift({
+        id: entry.id,
+        level: entry.level || 'info',
+        text: entry.text || '',
+        time: displayTime
+      })
+    }
+
+    /* 截断超出上限的旧日志（从尾部移除） */
+    if (logs.value.length > MAX_DISPLAY) {
+      logs.value.length = MAX_DISPLAY
+    }
+  } catch (_) {
+    /* IPC 调用失败（如主进程未就绪），静默恢复，下次轮询再试 */
+  } finally {
+    isPolling = false
   }
 }
 
 // ================================================================
-//  3. 清空日志
+//  4. 清空日志
 // ================================================================
 
 /*
- *  清除所有日志，并添加一条"日志已清空"的记录
- *  注意：只清空前端显示的数组，不影响主进程的日志缓冲区
+ *  clearLogs() —— 清除前端显示的所有日志
+ *
+ *  注意：只清空 logs 数组，不影响磁盘 log.txt。
+ *        清空后重置 lastLogId，确保后续轮询能加载新日志。
+ *        添加一条"日志已清空"的提示记录。
  */
 function clearLogs() {
   logs.value = []
-  addLog('info', '日志已清空')
+  lastLogId = ''
+  /* 添加一条清空提示（level: 'info'，时间是当前时间） */
+  const now = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  logs.value.unshift({
+    id: `clear-${Date.now()}`,
+    level: 'info',
+    text: '日志已清空',
+    time: now
+  })
 }
 
 // ================================================================
-//  4. 生命周期钩子
+//  5. 生命周期钩子
 // ================================================================
 
 /*
- *  组件挂载时：立即建立 SSE 连接，开始接收日志
- *  组件卸载前：关闭 SSE 连接，释放资源
- *  如果不在卸载时关闭，连接会继续存活并尝试回调已销毁的组件，导致内存泄漏
+ *  onMounted —— 组件挂载后立即开始轮询
+ *
+ *  先执行一次 pollLogs() 立即加载已有日志（不等第一个 800ms）。
+ *  然后每 800ms 轮询一次。
  */
-onMounted(() => startLogStream())
+onMounted(() => {
+  pollLogs()
+  pollTimer = setInterval(pollLogs, POLL_INTERVAL)
+})
+
+/*
+ *  onBeforeUnmount —— 组件卸载前停止轮询
+ *
+ *  必须 clearInterval，否则定时器会继续运行并尝试更新已销毁的组件，
+ *  导致内存泄漏和控制台错误。
+ */
 onBeforeUnmount(() => {
-  if (logSource) {
-    logSource.close()
-    logSource = null
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 })
 </script>

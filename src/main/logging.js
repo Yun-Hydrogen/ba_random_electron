@@ -1,7 +1,7 @@
 /*
 ================================================================================
 技术文档：src/main/logging.js
-职责：应用日志的统一收集与分发。
+职责：应用日志的统一收集、文件持久化与分发。
 
 ================================================================================
 架构概述
@@ -10,43 +10,97 @@
     1. 主进程：通过劫持 console.log/info/warn/error 自动捕获
     2. 渲染进程：通过 IPC 通道 renderer:log 主动上报
 
-  所有日志统一写入内存环形缓冲区（logBuffer，最多 600 条），供调试使用。
+  日志同时写入两处：
+    A. 内存环形缓冲区（logBuffer，最多 600 条）
+    B. 磁盘日志文件（%LocalAppData%\BlueRandom\log.txt）
 
-  历史说明：
-    旧版通过 SSE（Server-Sent Events over HTTP）向 Web 配置页推送日志。
-    随着 config-server.js 被原生 IPC 配置面板取代，SSE 通道已于 2026-06-28 移除。
-    如需在配置面板中查看日志，可通过 IPC 实现按需拉取。
+  磁盘日志的生命周期：
+    1. 启动时清空 log.txt（initLogFile）
+    2. 每条日志追加写入（pushLog → appendFile，互斥锁保护）
+    3. 配置面板通过 IPC 拉取文件内容（getLogs）
+    4. 日志文件仅保留当前运行时的内容，下次启动清空
+
+  竞态保护设计：
+    ┌──────────────────────────────────────────────────────────┐
+    │  writeQueue（Promise 链）                                  │
+    │                                                          │
+    │  pushLog("info", "A")  →  writeQueue = writeQueue        │
+    │                              .then(() => appendFile(A))  │
+    │  pushLog("warn", "B")  →  writeQueue = writeQueue        │
+    │                              .then(() => appendFile(B))  │
+    │  getLogs()             →  await writeQueue               │
+    │                              .then(() => readFile())     │
+    │                                                          │
+    │  关键：所有文件操作串行化，保证写入顺序一致，               │
+    │        读取操作等待所有待处理写入完成后再执行。             │
+    └──────────────────────────────────────────────────────────┘
 
 ================================================================================
 核心函数一览
 ================================================================================
   函数                       | 作用
   ───────────────────────────┼──────────────────────────────────────────────
-  pushLog(level, text)       | 将一条日志写入内存缓冲区
-  attachConsoleLogger()      | 劫持 console，使所有主进程 console 调用自动入日志
-  registerRendererLogIpc()   | 注册 IPC 通道，接收渲染进程上报的日志
+  initLogFile()              | 启动时清空/创建 log.txt
+  pushLog(level, text)       | 写入内存缓冲区 + 追加到磁盘日志
+  getLogs(maxLines)          | 从磁盘读取最近 N 条日志（返回 Promise）
+  attachConsoleLogger()      | 劫持 console，自动捕获主进程日志
+  registerRendererLogIpc()   | 注册 IPC 通道，接收渲染进程日志
 ================================================================================
 */
-const LOG_BUFFER_LIMIT = 600;
+const fs = require('fs');
+const path = require('path');
+const { app } = require('electron');
+
+/* ---- 日志文件路径（惰性求值，首次 pushLog 时确定）---- */
+let _logFilePath = null;
+function getLogFilePath() {
+  if (!_logFilePath) {
+    _logFilePath = path.join(app.getPath('userData'), 'log.txt');
+  }
+  return _logFilePath;
+}
 
 /*
- * logBuffer —— 内存中的环形日志缓冲区。
+ * initLogFile() —— 清空日志文件（每次启动时调用）
  *
- * 每条日志格式：
- *   {
- *     id:    "1719552000000-a3f2c1",  // 时间戳 + 随机 hex（唯一标识）
- *     level: "info" | "warn" | "error", // 日志级别
- *     text:  "这里写日志正文",           // 日志内容
- *     time:  "2026-06-28T12:00:00.000Z" // ISO 8601 时间戳
- *   }
+ * 在 app.whenReady() 之后调用（因为需要 app.getPath('userData') 可用）。
+ * 写入空字符串截断文件，确保本次运行只看到本轮日志。
  *
- * 容量：最多 600 条。超出后从头部丢弃最旧的，保持最新 600 条。
- * 内存估算：600 × ~200 字节 ≈ 120KB。
+ * 为什么清空而非追加：
+ *   日志是调试工具，旧日志容易干扰排查。每次启动重新开始，
+ *   日志文件只反映"本次运行"的状态。文件大小可控，不会无限增长。
  */
+function initLogFile() {
+  const p = getLogFilePath();
+  const dir = path.dirname(p);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(p, '', 'utf8');
+}
+
+/* ---- 内存环形缓冲区（保留，供未来可能的内存查询使用）---- */
+const LOG_BUFFER_LIMIT = 600;
 const logBuffer = [];
 
 /*
- * pushLog(level, text) —— 写入一条日志到内存缓冲区。
+ * writeQueue —— 文件写入互斥锁
+ *
+ * 这是一个 Promise 链。每次文件写入操作都通过 .then() 追加到链尾，
+ * 保证前一个写入完成前不会开始下一个写入。
+ *
+ * 为什么需要互斥锁：
+ *   fs.appendFile 是异步的。如果不加锁，并发调用 pushLog 可能导致
+ *   日志行交错写入（如 "line1\nli" + "ne2\n" → "line1\nline2\n" 乱序）。
+ *
+ * 为什么不用 fs.appendFileSync：
+ *   同步 I/O 会阻塞主进程的事件循环。日志写入频率不高（非每帧），
+ *   互斥锁方案既不影响性能，也保证写入顺序。
+ */
+let writeQueue = Promise.resolve();
+
+/*
+ * pushLog(level, text) —— 写入一条日志到内存缓冲区 + 磁盘文件。
  *
  * 参数：
  *   level — 日志级别字符串（'info' | 'warn' | 'error'）
@@ -55,16 +109,11 @@ const logBuffer = [];
  * 行为：
  *   1. 生成唯一 ID（时间戳 + 4 位随机 hex）
  *   2. 生成 ISO 8601 时间戳
- *   3. 追加到 logBuffer 尾部
- *   4. 若超出 600 条上限，丢弃最旧的
+ *   3. 追加到内存 logBuffer（环形，600 条上限）
+ *   4. 追加到磁盘 log.txt（JSON 行，互斥锁串行化）
  *
- * 注意：
- *   - 此函数是同步的，不要在高频循环中调用（如每帧 60 次）
- *   - ID 中的 Math.random() 非加密安全，仅用于日志去重
- *
- * 历史：
- *   旧版在此函数中向 SSE 客户端广播日志。SSE 已于 2026-06-28 随
- *   config-server.js 移除而废弃。广播代码已删除，现仅写缓冲区。
+ * 磁盘格式：每行一条 JSON
+ *   {"id":"1719552000000-a3f2c1","level":"info","text":"应用启动","time":"2026-06-28T12:00:00.000Z"}
  */
 function pushLog(level, text) {
   const time = new Date().toISOString();
@@ -74,25 +123,86 @@ function pushLog(level, text) {
     text: String(text),
     time
   };
-  logBuffer.push(entry);
 
-  /* 环形缓冲区：超出上限时丢弃最旧的条目 */
+  /* ---- 内存缓冲区 ---- */
+  logBuffer.push(entry);
   if (logBuffer.length > LOG_BUFFER_LIMIT) {
     logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
   }
+
+  /* ---- 磁盘追加（互斥锁保护）---- */
+  const line = JSON.stringify(entry) + '\n';
+  writeQueue = writeQueue.then(() => {
+    return new Promise((resolve) => {
+      fs.appendFile(getLogFilePath(), line, 'utf8', (err) => {
+        if (err) {
+          /*
+           * 文件写入失败：使用原始 console.error 记录（避免递归）。
+           * 这种情况极其罕见——通常是磁盘满或权限不足。
+           * 不抛出异常，因为日志系统本身不应该导致应用崩溃。
+           */
+          const origError = console.error.bind ? console.error.bind(console) : console.error;
+          origError('[logging] 日志写入磁盘失败:', err.message);
+        }
+        resolve();
+      });
+    });
+  });
+}
+
+/*
+ * getLogs(maxLines) —— 从磁盘读取最近 N 条日志。
+ *
+ * 参数：
+ *   maxLines — 最多读取的行数，默认 500
+ *
+ * 返回值：Promise<Array<logEntry>>
+ *   日志条目数组，按时间倒序（最新的在前），最多 maxLines 条。
+ *   如果文件不存在或读取失败，返回空数组 []。
+ *
+ * 竞态保护：
+ *   读取前先 await writeQueue，确保所有待处理的写入已完成。
+ *   这样读取到的内容一定包含之前所有 pushLog 写入的数据。
+ */
+function getLogs(maxLines = 500) {
+  return writeQueue.then(() => {
+    return new Promise((resolve) => {
+      fs.readFile(getLogFilePath(), 'utf8', (err, data) => {
+        if (err) {
+          /* 文件不存在或无法读取 → 返回空数组 */
+          return resolve([]);
+        }
+        /* 按行分割，过滤空行，取最后 maxLines 行 */
+        const lines = data.split('\n').filter(line => line.trim());
+        const recent = lines.slice(-maxLines);
+        /* 每行 JSON 解析，解析失败的行丢弃 */
+        const entries = [];
+        for (const line of recent) {
+          try {
+            entries.push(JSON.parse(line));
+          } catch (_) {
+            /* 损坏的日志行静默丢弃 */
+          }
+        }
+        /* 反转：最新的在前（符合日志查看习惯） */
+        entries.reverse();
+        resolve(entries);
+      });
+    });
+  });
 }
 
 /*
  * attachConsoleLogger() —— 劫持全局 console 对象，捕获所有主进程日志。
  *
  * 这是整个日志系统工作的关键。它替换了 console.log / info / warn / error，
- * 使开发者正常使用 console 的同时，所有输出自动进入 logBuffer。
+ * 使开发者正常使用 console 的同时，所有输出自动进入日志系统。
  *
  * 工作原理：
  *   1. 保存原始的 console[method] 引用
  *   2. 用新函数替换它：
  *      a. 将参数转为字符串
- *      b. 调用 pushLog 写入缓冲区
+ *      b. 调用 pushLog 写入缓冲区和磁盘
  *      c. 调用原始 console 方法，保持终端输出
  *
  * 参数序列化：
@@ -111,14 +221,10 @@ function pushLog(level, text) {
  *   - JSON.stringify 可能对循环引用对象抛出 TypeError，已被 try/catch 包裹
  */
 function attachConsoleLogger() {
-  /* 四种标准 console 方法 */
   ['log', 'info', 'warn', 'error'].forEach((method) => {
-    /* 保存原始方法引用 —— .bind(console) 确保 this 指向正确 */
     const original = console[method].bind(console);
 
-    /* 替换为新函数：...args 收集所有参数为数组 */
     console[method] = (...args) => {
-      /* 将所有参数转为单个字符串，用空格连接 */
       const text = args.map(arg => {
         if (typeof arg === 'string') return arg;
         try {
@@ -128,10 +234,7 @@ function attachConsoleLogger() {
         }
       }).join(' ');
 
-      /* 写入日志缓冲（'log' 级别统一记为 'info'） */
       pushLog(method === 'log' ? 'info' : method, text);
-
-      /* 调用原始的 console 方法，保持正常的终端输出 */
       original(...args);
     };
   });
@@ -149,27 +252,41 @@ function attachConsoleLogger() {
  *   - payload 必须是非空对象
  *   - payload.text 必须是字符串（忽略非字符串日志）
  *   - payload.level 默认 'info'
- *
- * 用途：
- *   渲染进程（Vue 组件）中的错误、警告可通过此通道统一收集到主进程日志缓冲。
- *   例如：axios 请求失败、Vue 组件异常、用户操作记录等。
- *
- * 调用位置：main.js 启动阶段，在注册 IPC 通道时调用。
  */
 function registerRendererLogIpc(ipcMain) {
   ipcMain.on('renderer:log', (_event, payload) => {
-    /* 防御性校验：忽略格式不正确的日志消息 */
     if (!payload || typeof payload.text !== 'string') return;
     const level = typeof payload.level === 'string' ? payload.level : 'info';
     pushLog(level, payload.text);
   });
 }
 
+/*
+ * registerGetLogsIpc(ipcMain) —— 注册日志查询 IPC 通道。
+ *
+ * 配置面板 TabLogs 通过此通道拉取磁盘日志。
+ *
+ * IPC 通道：config-panel:get-logs（请求-响应，invoke/handle 模式）
+ *
+ * 参数：
+ *   maxLines — 可选，最多返回的行数（默认 500）
+ *
+ * 返回值：日志条目数组（时间倒序，最新在前）
+ */
+function registerGetLogsIpc(ipcMain) {
+  ipcMain.handle('config-panel:get-logs', async (_event, maxLines) => {
+    return getLogs(typeof maxLines === 'number' ? maxLines : 500);
+  });
+}
+
 // ============================================================================
-//  导出 —— 供 main.js 使用
+//  导出 —— 供 main.js / ipc.js 使用
 // ============================================================================
 module.exports = {
+  initLogFile,
   attachConsoleLogger,
   pushLog,
-  registerRendererLogIpc
+  getLogs,
+  registerRendererLogIpc,
+  registerGetLogsIpc
 };
