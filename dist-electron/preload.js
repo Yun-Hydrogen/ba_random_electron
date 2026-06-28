@@ -2,36 +2,21 @@
 var { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("floatingButtonApi", {
 	getConfig: () => ipcRenderer.invoke("floating-button:get-config"),
-	onClick: () => ipcRenderer.send("floating-button:clicked"),
 	startDrag: () => ipcRenderer.send("floating-button:drag-start"),
 	moveDrag: (dx, dy) => ipcRenderer.send("floating-button:drag-move", {
 		dx,
 		dy
 	}),
 	endDrag: () => ipcRenderer.send("floating-button:drag-end"),
-	setIgnoreMouseEvents: (ignore) => ipcRenderer.send("floating-button:set-ignore-mouse", ignore)
+	setIgnoreMouseEvents: (ignore) => ipcRenderer.send("floating-button:set-ignore-mouse", ignore),
+	setExpanded: (expanded, size) => ipcRenderer.send("floating-button:set-expanded", {
+		expanded,
+		size
+	})
 });
-contextBridge.exposeInMainWorld("pickCountApi", {
-	getConfig: () => ipcRenderer.invoke("pick-count:get-config"),
-	cancel: () => ipcRenderer.send("pick-count:cancel"),
-	confirm: (count, playMusic) => ipcRenderer.send("pick-count:confirm", {
-		count,
-		playMusic
-	}),
-	onOpen: (callback) => {
-		const listener = () => callback();
-		ipcRenderer.on("pick-count:open", listener);
-		return () => {
-			ipcRenderer.removeListener("pick-count:open", listener);
-		};
-	},
-	onStopBgm: (callback) => {
-		const listener = () => callback();
-		ipcRenderer.on("pick-count:stop-bgm", listener);
-		return () => {
-			ipcRenderer.removeListener("pick-count:stop-bgm", listener);
-		};
-	}
+contextBridge.exposeInMainWorld("floatingPickerApi", {
+	getConfig: () => ipcRenderer.invoke("floating-picker:get-config"),
+	confirm: (count) => ipcRenderer.send("floating-picker:confirm", { count })
 });
 contextBridge.exposeInMainWorld("pickResultApi", {
 	getResults: () => ipcRenderer.invoke("pick-result:get-results"),
@@ -56,4 +41,19 @@ contextBridge.exposeInMainWorld("logApi", { send: (level, text) => ipcRenderer.s
 	level,
 	text
 }) });
+contextBridge.exposeInMainWorld("configPanelApi", {
+	getConfig: () => ipcRenderer.invoke("config-panel:get-config"),
+	saveConfig: (config) => ipcRenderer.invoke("config-panel:save-config", config),
+	close: (saved) => ipcRenderer.send("config-panel:close", { saved }),
+	getAppInfo: () => ipcRenderer.invoke("config-panel:get-app-info"),
+	adminElevate: () => ipcRenderer.invoke("config-panel:admin-elevate"),
+	restart: () => ipcRenderer.invoke("config-panel:restart"),
+	createStartupTask: (payload) => ipcRenderer.invoke("config-panel:create-startup-task", payload),
+	openConfigFile: () => ipcRenderer.invoke("config-panel:open-config-file"),
+	openConfigDir: () => ipcRenderer.invoke("config-panel:open-config-dir"),
+	checkUpdate: () => ipcRenderer.invoke("config-panel:check-update"),
+	pickExeFile: () => ipcRenderer.invoke("config-panel:pick-exe-file"),
+	resetConfig: () => ipcRenderer.invoke("config-panel:reset-config"),
+	getLogs: (maxLines) => ipcRenderer.invoke("config-panel:get-logs", maxLines)
+});
 //#endregion

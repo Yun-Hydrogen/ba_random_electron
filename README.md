@@ -10,12 +10,12 @@
 蔚蓝点名 是一款基于 Electron + Vue 3 的随机点名工具，灵感来源于 **《蔚蓝档案(Blue Archive)》** 的 ~~九蓝一金~~ 学生招募。
 
 ## 功能特性 🎯
-- 🪟 悬浮按钮快速唤起抽取
-- 👥 快速抽取人数选择窗口
-- ✉️ ~~不那么~~仿蔚蓝档案的抽奖动画
-- 📋 快捷名单导入与权重管理
+- 🪟 悬浮按钮快速抽取
+- 👥 1-10抽自定义配置
+- ✉️ ~~不那么~~仿《蔚蓝档案》的抽奖动画
+- 📋 快捷名单与权重管理
 - 🔁 允许/禁止重复抽取开关
-- ⚙️ Web 配置页
+- ⚙️ RizUI风格的配置面板（？）~~仿照Rizline设计的UI风格~~
 
 ## 快速开箱 📦
 - 前往 [Github Actions](https://github.com/Yun-Hydrogen/ba_random_electron/actions) 下载 最新构建，或在 [Github Releases](https://github.com/Yun-Hydrogen/ba_random_electron/releases) 获取手正式版。
@@ -29,21 +29,6 @@
 - `src/preload/`  预加载与 IPC 桥接
 - `src/renderer/`  前端渲染与页面
 - 构建完成后，在 `dist/` 目录中可找到 zip 产物与打包目录
-
-## 配置说明 🧩
-配置文件会保存在程序运行目录下的 `config.yml`。可在 Web 配置页中调整并保存，主要配置包括：
-- 名单与权重
-- 是否允许重复抽取
-- 悬浮按钮参数
-- 抽取背景音乐与音效
-- Web 配置端口
-- 管理员置顶 / UIAccess 置顶增强
-
-## Web 配置入口 🌐
-托盘菜单可打开 Web 配置页；也可直接访问：（默认端口为21219）
-```
-http://localhost:21219/#/config
-```
 
 ## 贡献 🤝
 欢迎提交 Issue 和 PR！
@@ -59,8 +44,6 @@ http://localhost:21219/#/config
 
 ## UIAccess 增强置顶 ✅
 - UIAccess 置顶增强为可选功能，默认关闭，可根据需要启动。
-- 本项目不内置 UIAccess 组件，需自行获取 [RunUIAccess](https://github.com/shc0743/RunUIAccess) 并提供其中的 `uiaccess.dll`。
-- 功能目的仅用于增强悬浮按钮置顶能力；使用前请确认符合当地法律法规及组织政策。
 - 启用该功能可能触发安全软件告警，项目作者对其使用方式与后果不承担责任。
 
 ## 许可证 📄
@@ -70,6 +53,9 @@ http://localhost:21219/#/config
 
 ## 感谢 💕
 - 《蔚蓝档案(Blue Archive)》游戏提供的灵感：
-[国服](https://bluearchive-cn.com/)  [国际服](https://bluearchive.nexon.com/home) [日服](https://bluearchive.jp/)
-- 音乐 **KARUT** 的 **《Connected Sky》**。
+[国服 《蔚蓝档案》](https://bluearchive-cn.com/)  
+[国际服 Blue Archive](https://bluearchive.nexon.com/home)
+
+- 抽取背景音乐 **KARUT** 的 **《Connected Sky》**。
+
 - [RunUIAccess](https://github.com/shc0743/RunUIAccess)

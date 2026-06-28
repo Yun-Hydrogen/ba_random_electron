@@ -31,15 +31,15 @@ pickResultDialog:
   # 抽奖音效音量（0.0-1.0），默认 0.6
   gachaSoundVolume: 0.6
 
-# 网页配置服务
-webConfig:
-  # 配置网页端口（默认 21219）
-  port: 21219
+# 高级设置（管理员权限 + 计划任务 + UIAccess）
+admin:
   # 启用管理员置顶增强（Windows 下会尝试管理员权限）
   adminTopmostEnabled: false
-  # 是否创建开机计划任务（管理员权限运行）
-  adminAutoStartEnabled: false
-  # 计划任务运行的可执行文件路径
+  # 计划任务以管理员身份运行
+  adminAutoStartAdmin: true
+  # 计划任务运行的可执行文件路径（空=自动检测）
   adminAutoStartPath: ""
   # 计划任务名称
   adminAutoStartTaskName: "Blue Random (Admin)"
+  # 启用 UIAccess 置顶
+  uiAccessEnabled: false

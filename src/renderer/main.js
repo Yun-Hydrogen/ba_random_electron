@@ -39,7 +39,7 @@ const logToMain = (level, text) => {
 
 // 非 Electron 环境访问时，直接跳转到配置页面
 const isElectron = window.floatingButtonApi !== undefined
-  || window.pickCountApi !== undefined
+  || window.floatingPickerApi !== undefined
   || window.pickResultApi !== undefined
   || navigator.userAgent.toLowerCase().indexOf('electron') > -1;
 if (!isElectron && window.location.hash === '') {

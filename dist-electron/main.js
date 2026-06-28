@@ -3,9 +3,9 @@ var __commonJSMin = (cb, mod) => () => (mod || cb((mod = { exports: {} }).export
 //#endregion
 //#region src/main/admin.js
 var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$3 } = require("electron");
+	var { app: app$5 } = require("electron");
 	var { execFileSync, spawnSync } = require("child_process");
-	var fs$3 = require("fs");
+	var fs$4 = require("fs");
 	var path$4 = require("path");
 	var IS_WINDOWS = process.platform === "win32";
 	var ADMIN_TASK_DEFAULT_NAME = "Blue Random (Admin)";
@@ -14,10 +14,10 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var IS_UIACCESS_PROCESS = process.argv.includes(UIACCESS_ARG);
 	function configureUserDataPath() {
 		if (!IS_WINDOWS) return;
-		const appData = app$3.getPath("appData");
+		const appData = app$5.getPath("appData");
 		const localRoot = path$4.resolve(appData, "..", "Local");
 		const targetPath = path$4.join(localRoot, USERDATA_DIR_NAME);
-		app$3.setPath("userData", targetPath);
+		app$5.setPath("userData", targetPath);
 	}
 	function quoteForPowerShell(text) {
 		return String(text).replace(/'/g, "''");
@@ -26,13 +26,18 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (!IS_WINDOWS) return "powershell";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
 		const psPath = path$4.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-		return fs$3.existsSync(psPath) ? psPath : "powershell";
+		return fs$4.existsSync(psPath) ? psPath : "powershell";
 	}
 	function getRundll32Path() {
 		if (!IS_WINDOWS) return "rundll32.exe";
 		const root = process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
 		const dllPath = path$4.join(root, "System32", "rundll32.exe");
-		return fs$3.existsSync(dllPath) ? dllPath : "rundll32.exe";
+		return fs$4.existsSync(dllPath) ? dllPath : "rundll32.exe";
+	}
+	function buildUiAccessCommandLine(exePath, args) {
+		const quote = (value) => `"${String(value).replace(/"/g, "\\\"")}"`;
+		const safeArgs = Array.isArray(args) ? args : [];
+		return [quote(exePath), ...safeArgs.map((arg) => quote(arg))].join(" ");
 	}
 	function isProcessElevated() {
 		if (!IS_WINDOWS) return false;
@@ -83,27 +88,22 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		};
 	}
 	function getDefaultExePath() {
-		return app$3.getPath("exe");
+		return app$5.getPath("exe");
 	}
 	function getDefaultUiAccessDllPath() {
 		const exeDir = path$4.dirname(getDefaultExePath());
 		return path$4.join(exeDir, "uiaccess.dll");
-	}
-	function buildUiAccessCommandLine(exePath, args) {
-		const quote = (value) => `"${String(value).replace(/"/g, "\\\"")}"`;
-		const safeArgs = Array.isArray(args) ? args : [];
-		return [quote(exePath), ...safeArgs.map((arg) => quote(arg))].join(" ");
 	}
 	function requestUiAccessRelaunch(uiAccessDllPath) {
 		if (!IS_WINDOWS) return {
 			ok: false,
 			message: "当前系统不支持 UIAccess。"
 		};
-		if (!app$3.isPackaged) return {
+		if (!app$5.isPackaged) return {
 			ok: false,
 			message: "UIAccess 仅支持正式版运行。"
 		};
-		if (!uiAccessDllPath || !fs$3.existsSync(uiAccessDllPath)) return {
+		if (!uiAccessDllPath || !fs$4.existsSync(uiAccessDllPath)) return {
 			ok: false,
 			message: "未找到 uiaccess.dll，请检查路径。"
 		};
@@ -156,7 +156,7 @@ var require_admin = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			ok: false,
 			message: "仅支持 Windows 计划任务。"
 		};
-		if (!exePath || !fs$3.existsSync(exePath)) return {
+		if (!exePath || !fs$4.existsSync(exePath)) return {
 			ok: false,
 			message: "可执行文件路径无效或不存在。"
 		};
@@ -2357,8 +2357,8 @@ var require_js_yaml = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#endregion
 //#region src/main/config.js
 var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$2, shell } = require("electron");
-	var fs$2 = require("fs");
+	var { app: app$4, shell: shell$1 } = require("electron");
+	var fs$3 = require("fs");
 	var path$3 = require("path");
 	var yaml = require_js_yaml();
 	var admin = require_admin();
@@ -2373,27 +2373,31 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			position: {
 				x: null,
 				y: null
-			}
+			},
+			iconDataUrl: "",
+			iconSize: 48,
+			borderColor: "#ffffff"
 		},
-		pickCountDialog: {
-			defaultPlayMusic: false,
-			backgroundDarknessPercent: 50,
-			defaultCount: 1
-		},
+		pickCountDialog: { defaultCount: 1 },
 		pickResultDialog: {
 			defaultPlayGachaSound: true,
-			gachaSoundVolume: .6
+			soundVolume: 80,
+			playMusic: false,
+			musicVolume: 60,
+			bgmStartTime: 0,
+			bgmFadeDuration: 1.5,
+			panelOpacity: .9,
+			panelBgColor: "#ffffff",
+			panelBorderColor: "#66ccff"
 		},
-		webConfig: {
-			port: 21219,
+		admin: {
 			adminTopmostEnabled: false,
-			adminAutoStartEnabled: false,
+			adminAutoStartAdmin: true,
 			adminAutoStartPath: "",
 			adminAutoStartTaskName: admin.ADMIN_TASK_DEFAULT_NAME,
 			uiAccessEnabled: false
 		}
 	};
-	var currentConfig = DEFAULT_CONFIG;
 	function clampNumber(value, min, max, fallback) {
 		const num = Number(value);
 		if (Number.isNaN(num)) return fallback;
@@ -2412,166 +2416,165 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			};
 			return null;
 		}).filter((s) => s && s.name);
-		const fb = source.floatingButton && typeof source.floatingButton === "object" ? source.floatingButton : {};
 		const allowRepeatDraw = typeof source.allowRepeatDraw === "boolean" ? source.allowRepeatDraw : DEFAULT_CONFIG.allowRepeatDraw;
 		const agreedEula = typeof source.agreedEula === "boolean" ? source.agreedEula : DEFAULT_CONFIG.agreedEula;
-		const position = fb.position && typeof fb.position === "object" ? fb.position : {};
-		const pick = source.pickCountDialog && typeof source.pickCountDialog === "object" ? source.pickCountDialog : {};
-		const pickResult = source.pickResultDialog && typeof source.pickResultDialog === "object" ? source.pickResultDialog : {};
-		const web = source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
+		const fb = source.floatingButton && typeof source.floatingButton === "object" ? source.floatingButton : {};
+		const fbPos = fb.position && typeof fb.position === "object" ? fb.position : {};
 		const alwaysOnTop = typeof fb.alwaysOnTop === "boolean" ? fb.alwaysOnTop : DEFAULT_CONFIG.floatingButton.alwaysOnTop;
+		const floatingButton = {
+			sizePercent: clampNumber(fb.sizePercent, 50, 200, DEFAULT_CONFIG.floatingButton.sizePercent),
+			transparencyPercent: clampNumber(fb.transparencyPercent, 0, 100, DEFAULT_CONFIG.floatingButton.transparencyPercent),
+			alwaysOnTop,
+			position: {
+				x: Number.isFinite(Number(fbPos.x)) ? Math.round(Number(fbPos.x)) : null,
+				y: Number.isFinite(Number(fbPos.y)) ? Math.round(Number(fbPos.y)) : null
+			},
+			iconDataUrl: typeof fb.iconDataUrl === "string" && fb.iconDataUrl.startsWith("data:image/") ? fb.iconDataUrl : DEFAULT_CONFIG.floatingButton.iconDataUrl,
+			iconSize: clampNumber(fb.iconSize, 16, 128, DEFAULT_CONFIG.floatingButton.iconSize),
+			borderColor: typeof fb.borderColor === "string" && fb.borderColor ? fb.borderColor : DEFAULT_CONFIG.floatingButton.borderColor
+		};
+		const pick = source.pickCountDialog && typeof source.pickCountDialog === "object" ? source.pickCountDialog : {};
+		const pickCountDialog = { defaultCount: Math.round(clampNumber(pick.defaultCount, 1, 10, DEFAULT_CONFIG.pickCountDialog.defaultCount)) };
+		const pickResult = source.pickResultDialog && typeof source.pickResultDialog === "object" ? source.pickResultDialog : {};
+		const pickResultDialog = {
+			defaultPlayGachaSound: typeof pickResult.defaultPlayGachaSound === "boolean" ? pickResult.defaultPlayGachaSound : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
+			soundVolume: clampNumber(pickResult.soundVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.soundVolume),
+			playMusic: typeof pickResult.playMusic === "boolean" ? pickResult.playMusic : DEFAULT_CONFIG.pickResultDialog.playMusic,
+			musicVolume: clampNumber(pickResult.musicVolume, 0, 100, DEFAULT_CONFIG.pickResultDialog.musicVolume),
+			bgmStartTime: clampNumber(pickResult.bgmStartTime, 0, 120, DEFAULT_CONFIG.pickResultDialog.bgmStartTime),
+			bgmFadeDuration: clampNumber(pickResult.bgmFadeDuration, .5, 5, DEFAULT_CONFIG.pickResultDialog.bgmFadeDuration),
+			panelOpacity: clampNumber(pickResult.panelOpacity, .1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
+			panelBgColor: typeof pickResult.panelBgColor === "string" && pickResult.panelBgColor ? pickResult.panelBgColor : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
+			panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
+		};
+		const adminSource = source.admin && typeof source.admin === "object" ? source.admin : source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
 		return {
 			studentList: students,
 			allowRepeatDraw,
 			agreedEula,
-			floatingButton: {
-				sizePercent: clampNumber(fb.sizePercent, 0, 1e3, DEFAULT_CONFIG.floatingButton.sizePercent),
-				transparencyPercent: clampNumber(fb.transparencyPercent, 0, 100, DEFAULT_CONFIG.floatingButton.transparencyPercent),
-				alwaysOnTop,
-				position: {
-					x: Number.isFinite(Number(position.x)) ? Math.round(Number(position.x)) : null,
-					y: Number.isFinite(Number(position.y)) ? Math.round(Number(position.y)) : null
-				}
-			},
-			pickCountDialog: {
-				defaultPlayMusic: typeof pick.defaultPlayMusic === "boolean" ? pick.defaultPlayMusic : DEFAULT_CONFIG.pickCountDialog.defaultPlayMusic,
-				backgroundDarknessPercent: clampNumber(pick.backgroundDarknessPercent, 0, 100, DEFAULT_CONFIG.pickCountDialog.backgroundDarknessPercent),
-				defaultCount: Math.round(clampNumber(pick.defaultCount, 1, 10, DEFAULT_CONFIG.pickCountDialog.defaultCount))
-			},
-			pickResultDialog: {
-				defaultPlayGachaSound: typeof pickResult.defaultPlayGachaSound === "boolean" ? pickResult.defaultPlayGachaSound : DEFAULT_CONFIG.pickResultDialog.defaultPlayGachaSound,
-				gachaSoundVolume: clampNumber(pickResult.gachaSoundVolume, 0, 1, DEFAULT_CONFIG.pickResultDialog.gachaSoundVolume)
-			},
-			webConfig: {
-				port: Math.round(clampNumber(web.port, 1, 65535, DEFAULT_CONFIG.webConfig.port)),
-				adminTopmostEnabled: typeof web.adminTopmostEnabled === "boolean" ? web.adminTopmostEnabled : DEFAULT_CONFIG.webConfig.adminTopmostEnabled,
-				adminAutoStartEnabled: typeof web.adminAutoStartEnabled === "boolean" ? web.adminAutoStartEnabled : DEFAULT_CONFIG.webConfig.adminAutoStartEnabled,
-				adminAutoStartPath: typeof web.adminAutoStartPath === "string" ? web.adminAutoStartPath : DEFAULT_CONFIG.webConfig.adminAutoStartPath,
-				adminAutoStartTaskName: typeof web.adminAutoStartTaskName === "string" && web.adminAutoStartTaskName.trim() ? web.adminAutoStartTaskName.trim() : DEFAULT_CONFIG.webConfig.adminAutoStartTaskName,
-				uiAccessEnabled: typeof web.uiAccessEnabled === "boolean" ? web.uiAccessEnabled : DEFAULT_CONFIG.webConfig.uiAccessEnabled
+			floatingButton,
+			pickCountDialog,
+			pickResultDialog,
+			admin: {
+				adminTopmostEnabled: typeof adminSource.adminTopmostEnabled === "boolean" ? adminSource.adminTopmostEnabled : DEFAULT_CONFIG.admin.adminTopmostEnabled,
+				adminAutoStartAdmin: typeof adminSource.adminAutoStartAdmin === "boolean" ? adminSource.adminAutoStartAdmin : DEFAULT_CONFIG.admin.adminAutoStartAdmin,
+				adminAutoStartPath: typeof adminSource.adminAutoStartPath === "string" ? adminSource.adminAutoStartPath : DEFAULT_CONFIG.admin.adminAutoStartPath,
+				adminAutoStartTaskName: typeof adminSource.adminAutoStartTaskName === "string" && adminSource.adminAutoStartTaskName.trim() ? adminSource.adminAutoStartTaskName.trim() : DEFAULT_CONFIG.admin.adminAutoStartTaskName,
+				uiAccessEnabled: typeof adminSource.uiAccessEnabled === "boolean" ? adminSource.uiAccessEnabled : DEFAULT_CONFIG.admin.uiAccessEnabled
 			}
 		};
 	}
 	function getConfigPath() {
-		return path$3.join(app$2.getPath("userData"), "config.yml");
+		return path$3.join(app$4.getPath("userData"), "config.yml");
+	}
+	function getConfigDir() {
+		return path$3.dirname(getConfigPath());
 	}
 	function getLegacyConfigPaths() {
 		const legacyPaths = [];
-		const exeDir = path$3.dirname(app$2.getPath("exe"));
+		const exeDir = path$3.dirname(app$4.getPath("exe"));
 		legacyPaths.push(path$3.join(exeDir, "config.yml"));
-		if (!app$2.isPackaged) legacyPaths.push(path$3.join(process.cwd(), "config.yml"));
+		if (!app$4.isPackaged) legacyPaths.push(path$3.join(process.cwd(), "config.yml"));
 		if (admin.IS_WINDOWS) {
-			const appData = app$2.getPath("appData");
+			const appData = app$4.getPath("appData");
 			const localRoot = path$3.resolve(appData, "..", "Local");
 			legacyPaths.push(path$3.join(localRoot, "Blue Random", "config.yml"));
 		}
 		const currentPath = getConfigPath();
 		return Array.from(new Set(legacyPaths.filter((p) => p && p !== currentPath)));
 	}
-	function getConfigDir() {
-		return path$3.dirname(getConfigPath());
-	}
-	async function openConfigFile() {
-		const configPath = getConfigPath();
-		writeDefaultConfigIfMissing(configPath);
-		const result = await shell.openPath(configPath);
-		if (result) return {
-			ok: false,
-			message: `打开配置文件失败: ${result}`
-		};
-		return {
-			ok: true,
-			message: "已打开配置文件。"
-		};
-	}
-	async function openConfigDir() {
-		const configDir = getConfigDir();
-		fs$2.mkdirSync(configDir, { recursive: true });
-		const result = await shell.openPath(configDir);
-		if (result) return {
-			ok: false,
-			message: `打开配置目录失败: ${result}`
-		};
-		return {
-			ok: true,
-			message: "已打开配置目录。"
-		};
-	}
-	function openConfigPageInBrowser() {
-		const url = `http://localhost:${refreshConfig().webConfig.port}/#/config`;
-		shell.openExternal(url);
-	}
 	function toConfigYamlWithComments(config) {
 		const fb = config.floatingButton;
 		const pick = config.pickCountDialog;
 		const pickResult = config.pickResultDialog;
-		const web = config.webConfig;
+		const adminCfg = config.admin;
 		const posX = Number.isFinite(Number(fb.position.x)) ? String(Math.round(Number(fb.position.x))) : "null";
 		const posY = Number.isFinite(Number(fb.position.y)) ? String(Math.round(Number(fb.position.y))) : "null";
 		const yamlSingleQuote = (value) => `'${String(value || "").replace(/'/g, "''")}'`;
 		return [
-			"# 抽取名单列表",
+			"# ============================================================",
+			"#  蔚蓝点名 配置文件",
+			"#  通过配置面板（托盘 → 配置）修改后自动保存",
+			"#  也可手动编辑此文件，保存后重启应用生效",
+			"# ============================================================",
+			"",
+			"# ---- 抽取名单 ----",
 			`studentList:${Array.isArray(config.studentList) && config.studentList.length > 0 ? "\n" + config.studentList.map((s) => `  - name: "${s.name}"\n    weight: ${s.weight}`).join("\n") : " []"}`,
 			`allowRepeatDraw: ${config.allowRepeatDraw ? "true" : "false"}`,
 			`agreedEula: ${config.agreedEula ? "true" : "false"}`,
 			"",
-			"# 悬浮按钮配置",
+			"# ---- 悬浮按钮 ----",
 			"floatingButton:",
-			"  # 按钮大小百分比（基准 50px*50px），范围 0-1000，默认 100",
+			"  # 按钮大小百分比（50-200），默认 100",
 			`  sizePercent: ${fb.sizePercent}`,
-			"  # 透明度百分比，范围 0-100（0=完全不透明，100=完全透明），默认 20",
+			"  # 透明度百分比（0-100），0=不透明，100=全透明，默认 20",
 			`  transparencyPercent: ${fb.transparencyPercent}`,
-			"  # 是否置顶（true/false），默认 true",
+			"  # 是否始终置顶（true/false），默认 true",
 			`  alwaysOnTop: ${fb.alwaysOnTop ? "true" : "false"}`,
-			"  # 悬浮按钮窗口位置（左上角屏幕坐标），退出时自动保存；null 表示使用系统默认位置",
+			"  # 窗口位置（屏幕坐标），退出时自动保存；null 为系统默认",
 			"  position:",
 			`    x: ${posX}`,
 			`    y: ${posY}`,
+			"  # 自定义图标（base64 data URL，data:image/...;base64,...），空字符串为内置默认图标",
+			"  # 由 TabFloating 通过 FileReader 生成并保存，不可手动编辑",
+			`  iconDataUrl: ${yamlSingleQuote(fb.iconDataUrl || "")}`,
+			"  # 图标尺寸（px），范围 16-128，默认 48",
+			`  iconSize: ${fb.iconSize}`,
+			"  # 按钮边框颜色（hex），默认 #ffffff",
+			`  borderColor: ${yamlSingleQuote(fb.borderColor || "#ffffff")}`,
 			"",
-			"# 人数选择窗口配置",
+			"# ---- 人数选择 ----",
 			"pickCountDialog:",
-			"  # 是否默认播放喜庆点名音乐（true/false），默认 false",
-			`  defaultPlayMusic: ${pick.defaultPlayMusic ? "true" : "false"}`,
-			"  # 背景变暗程度，范围 0-100（100 接近全黑），默认 50",
-			`  backgroundDarknessPercent: ${pick.backgroundDarknessPercent}`,
-			"  # 人数默认值，范围 1-10 的整数，默认 1",
+			"  # 默认抽取人数（1-10），默认 1",
 			`  defaultCount: ${pick.defaultCount}`,
 			"",
-			"# 抽奖结果动画音效配置",
+			"# ---- 抽奖结果弹窗 ----",
 			"pickResultDialog:",
-			"  # 是否默认播放抽奖音效（true/false），默认 true",
+			"  # 是否播放抽卡音效（true/false），默认 true",
 			`  defaultPlayGachaSound: ${pickResult.defaultPlayGachaSound ? "true" : "false"}`,
-			"  # 抽奖音效音量（0.0-1.0），默认 0.6",
-			`  gachaSoundVolume: ${pickResult.gachaSoundVolume}`,
+			"  # 音效音量（0-100），默认 80",
+			`  soundVolume: ${pickResult.soundVolume}`,
+			"  # 是否播放抽卡背景音乐（true/false），默认 false",
+			`  playMusic: ${pickResult.playMusic ? "true" : "false"}`,
+			"  # 音乐音量（0-100），默认 60",
+			`  musicVolume: ${pickResult.musicVolume}`,
+			"  # BGM 播放起始位置（秒），范围 0-120，默认 0（从头开始）",
+			`  bgmStartTime: ${pickResult.bgmStartTime}`,
+			"  # BGM 淡入淡出时长（秒），范围 0.5-5，默认 1.5",
+			`  bgmFadeDuration: ${pickResult.bgmFadeDuration}`,
+			"  # 面板不透明度（0.1-1.0），默认 0.9",
+			`  panelOpacity: ${pickResult.panelOpacity}`,
+			"  # 面板背景颜色（hex），默认 #ffffff",
+			`  panelBgColor: ${yamlSingleQuote(pickResult.panelBgColor || "#ffffff")}`,
+			"  # 面板边框颜色（hex），默认 #66ccff",
+			`  panelBorderColor: ${yamlSingleQuote(pickResult.panelBorderColor || "#66ccff")}`,
 			"",
-			"# 网页配置服务",
-			"webConfig:",
-			"  # 配置网页端口（默认 21219）",
-			`  port: ${web.port}`,
+			"# ---- 高级设置 ----",
+			"admin:",
 			"  # 启用管理员置顶增强（Windows 下会尝试管理员权限）",
-			`  adminTopmostEnabled: ${web.adminTopmostEnabled ? "true" : "false"}`,
-			"  # 是否创建开机计划任务（管理员权限运行）",
-			`  adminAutoStartEnabled: ${web.adminAutoStartEnabled ? "true" : "false"}`,
-			"  # 计划任务运行的可执行文件路径",
-			`  adminAutoStartPath: ${yamlSingleQuote(web.adminAutoStartPath)}`,
-			"  # 计划任务名称",
-			`  adminAutoStartTaskName: ${yamlSingleQuote(web.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
-			"  # 管理员身份运行时自动使用 UIAccess（需要 uiaccess.dll 随包分发）",
-			`  uiAccessEnabled: ${web.uiAccessEnabled ? "true" : "false"}`,
+			`  adminTopmostEnabled: ${adminCfg.adminTopmostEnabled ? "true" : "false"}`,
+			"  # 开机计划任务是否以管理员身份运行",
+			`  adminAutoStartAdmin: ${adminCfg.adminAutoStartAdmin ? "true" : "false"}`,
+			"  # 计划任务的可执行文件路径（留空则自动检测）",
+			`  adminAutoStartPath: ${yamlSingleQuote(adminCfg.adminAutoStartPath)}`,
+			"  # 计划任务在任务计划程序中的显示名称",
+			`  adminAutoStartTaskName: ${yamlSingleQuote(adminCfg.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
+			"  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）",
+			`  uiAccessEnabled: ${adminCfg.uiAccessEnabled ? "true" : "false"}`,
 			""
 		].join("\n");
 	}
 	function saveConfig(config) {
 		const configPath = getConfigPath();
 		const yamlText = toConfigYamlWithComments(config);
-		fs$2.mkdirSync(path$3.dirname(configPath), { recursive: true });
-		fs$2.writeFileSync(configPath, yamlText, "utf8");
+		fs$3.mkdirSync(path$3.dirname(configPath), { recursive: true });
+		fs$3.writeFileSync(configPath, yamlText, "utf8");
 	}
 	function writeDefaultConfigIfMissing(configPath) {
-		if (fs$2.existsSync(configPath)) return;
-		for (const legacyPath of getLegacyConfigPaths()) if (fs$2.existsSync(legacyPath)) {
-			fs$2.mkdirSync(path$3.dirname(configPath), { recursive: true });
-			fs$2.copyFileSync(legacyPath, configPath);
+		if (fs$3.existsSync(configPath)) return;
+		for (const legacyPath of getLegacyConfigPaths()) if (fs$3.existsSync(legacyPath)) {
+			fs$3.mkdirSync(path$3.dirname(configPath), { recursive: true });
+			fs$3.copyFileSync(legacyPath, configPath);
 			return;
 		}
 		saveConfig(DEFAULT_CONFIG);
@@ -2580,7 +2583,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const configPath = getConfigPath();
 		writeDefaultConfigIfMissing(configPath);
 		try {
-			const raw = fs$2.readFileSync(configPath, "utf8");
+			const raw = fs$3.readFileSync(configPath, "utf8");
 			const normalized = normalizeConfig(yaml.load(raw));
 			saveConfig(normalized);
 			return normalized;
@@ -2592,8 +2595,33 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 	}
 	function refreshConfig() {
-		currentConfig = loadConfig();
-		return currentConfig;
+		return loadConfig();
+	}
+	async function openConfigFile() {
+		const configPath = getConfigPath();
+		writeDefaultConfigIfMissing(configPath);
+		const result = await shell$1.openPath(configPath);
+		if (result) return {
+			ok: false,
+			message: `打开配置文件失败: ${result}`
+		};
+		return {
+			ok: true,
+			message: "已打开配置文件。"
+		};
+	}
+	async function openConfigDir() {
+		const configDir = getConfigDir();
+		fs$3.mkdirSync(configDir, { recursive: true });
+		const result = await shell$1.openPath(configDir);
+		if (result) return {
+			ok: false,
+			message: `打开配置目录失败: ${result}`
+		};
+		return {
+			ok: true,
+			message: "已打开配置目录。"
+		};
 	}
 	module.exports = {
 		DEFAULT_CONFIG,
@@ -2604,279 +2632,31 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		normalizeConfig,
 		openConfigDir,
 		openConfigFile,
-		openConfigPageInBrowser,
 		refreshConfig,
 		saveConfig,
 		writeDefaultConfigIfMissing
 	};
 }));
 //#endregion
-//#region src/main/config-server.js
-var require_config_server = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var http = require("http");
-	var fs$1 = require("fs");
-	var path$2 = require("path");
-	var configServer = null;
-	var configServerPort = null;
-	var serverDeps = null;
-	var configEventClients = /* @__PURE__ */ new Set();
-	function broadcastConfigRefresh(reason = "refresh") {
-		const payload = {
-			type: "config-refresh",
-			reason,
-			time: (/* @__PURE__ */ new Date()).toISOString()
-		};
-		const message = `data: ${JSON.stringify(payload)}\n\n`;
-		for (const res of configEventClients) res.write(message);
-	}
-	function handleConfigEventStream(req, res) {
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream; charset=utf-8",
-			"Cache-Control": "no-cache",
-			"Connection": "keep-alive",
-			"X-Accel-Buffering": "no"
-		});
-		res.write("\n");
-		configEventClients.add(res);
-		broadcastConfigRefresh("connect");
-		req.on("close", () => {
-			configEventClients.delete(res);
-		});
-	}
-	function getMimeType(filePath) {
-		if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
-		if (filePath.endsWith(".js")) return "application/javascript; charset=utf-8";
-		if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
-		if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
-		return "text/plain; charset=utf-8";
-	}
-	function sendJson(res, statusCode, payload) {
-		res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
-		res.end(JSON.stringify(payload));
-	}
-	function parseRequestJsonBody(req) {
-		return new Promise((resolve, reject) => {
-			let body = "";
-			req.on("data", (chunk) => {
-				body += chunk;
-				if (body.length > 1024 * 1024) reject(/* @__PURE__ */ new Error("Payload too large"));
-			});
-			req.on("end", () => {
-				if (!body.trim()) {
-					resolve({});
-					return;
-				}
-				try {
-					resolve(JSON.parse(body));
-				} catch (error) {
-					reject(error);
-				}
-			});
-			req.on("error", reject);
-		});
-	}
-	function createConfigServerRequestHandler() {
-		const { app, isDebugMode, config, update, logging, windows, admin } = serverDeps;
-		return async (req, res) => {
-			const requestUrl = req.url || "/";
-			if (req.method === "GET" && requestUrl === "/api/config") return sendJson(res, 200, config.refreshConfig());
-			if (req.method === "GET" && requestUrl === "/api/app-info") {
-				const uiAccessDefaultPath = admin.getDefaultUiAccessDllPath();
-				return sendJson(res, 200, {
-					version: app.getVersion(),
-					isDebugMode,
-					isAdmin: admin.isProcessElevated(),
-					exePath: admin.getDefaultExePath(),
-					uiAccessDllExists: fs$1.existsSync(uiAccessDefaultPath),
-					isUiAccess: process.argv.includes(admin.UIACCESS_ARG),
-					configPath: config.getConfigPath(),
-					configDir: config.getConfigDir()
-				});
-			}
-			if (req.method === "POST" && requestUrl === "/api/config/open-file") try {
-				const result = await config.openConfigFile();
-				if (!result.ok) return sendJson(res, 400, result);
-				return sendJson(res, 200, result);
-			} catch (error) {
-				return sendJson(res, 500, {
-					ok: false,
-					message: String(error)
-				});
-			}
-			if (req.method === "POST" && requestUrl === "/api/config/open-dir") try {
-				const result = await config.openConfigDir();
-				if (!result.ok) return sendJson(res, 400, result);
-				return sendJson(res, 200, result);
-			} catch (error) {
-				return sendJson(res, 500, {
-					ok: false,
-					message: String(error)
-				});
-			}
-			if (req.method === "GET" && requestUrl === "/api/check-update") try {
-				return sendJson(res, 200, await update.checkUpdateFromMain());
-			} catch (error) {
-				console.error("Update check failed:", error);
-				return sendJson(res, 500, {
-					ok: false,
-					status: "error",
-					title: "检查更新失败",
-					detail: "请检查网络或稍后再试。"
-				});
-			}
-			if (req.method === "GET" && requestUrl === "/api/logs") {
-				logging.handleLogStream(req, res);
-				return;
-			}
-			if (req.method === "GET" && requestUrl === "/api/config-events") {
-				handleConfigEventStream(req, res);
-				return;
-			}
-			if (req.method === "POST" && requestUrl === "/api/config") try {
-				const payload = await parseRequestJsonBody(req);
-				const normalized = config.normalizeConfig(payload);
-				config.saveConfig(normalized);
-				startConfigServer();
-				windows.refreshFloatingButtonWindow();
-				broadcastConfigRefresh("save");
-				return sendJson(res, 200, {
-					ok: true,
-					message: "配置保存成功，悬浮窗已自动刷新配置",
-					restartRequired: false
-				});
-			} catch (error) {
-				return sendJson(res, 400, {
-					ok: false,
-					message: "配置保存失败，请检查输入格式"
-				});
-			}
-			if (req.method === "POST" && requestUrl === "/api/restart") {
-				sendJson(res, 200, { ok: true });
-				setTimeout(() => {
-					windows.setQuitting(true);
-					app.relaunch();
-					app.exit(0);
-				}, 80);
-				return;
-			}
-			if (req.method === "POST" && requestUrl === "/api/admin/elevate") {
-				if (!admin.IS_WINDOWS) return sendJson(res, 400, {
-					ok: false,
-					message: "当前系统不支持管理员提升。"
-				});
-				if (admin.isProcessElevated()) return sendJson(res, 200, {
-					ok: true,
-					message: "已在管理员权限下运行。"
-				});
-				const result = admin.requestAdminRelaunch();
-				if (!result.ok) return sendJson(res, 400, result);
-				sendJson(res, 200, result);
-				setTimeout(() => {
-					windows.setQuitting(true);
-					app.exit(0);
-				}, 150);
-				return;
-			}
-			if (req.method === "POST" && requestUrl === "/api/task/create-admin-startup") try {
-				const payload = await parseRequestJsonBody(req);
-				const exePath = payload && typeof payload.exePath === "string" ? payload.exePath.trim() : "";
-				const taskName = payload && typeof payload.taskName === "string" ? payload.taskName.trim() : admin.ADMIN_TASK_DEFAULT_NAME;
-				const result = admin.createAdminStartupTask({
-					taskName,
-					exePath
-				});
-				if (!result.ok) return sendJson(res, 400, result);
-				const baseConfig = config.refreshConfig();
-				const updated = config.normalizeConfig({
-					...baseConfig,
-					webConfig: {
-						...baseConfig.webConfig,
-						adminAutoStartEnabled: true,
-						adminAutoStartPath: exePath,
-						adminAutoStartTaskName: taskName
-					}
-				});
-				config.saveConfig(updated);
-				return sendJson(res, 200, result);
-			} catch (error) {
-				return sendJson(res, 400, {
-					ok: false,
-					message: "创建计划任务失败。"
-				});
-			}
-			const urlPath = requestUrl.split("?")[0].split("#")[0];
-			if (!urlPath.startsWith("/api")) {
-				if (process.env.VITE_DEV_SERVER_URL) {
-					res.writeHead(302, { Location: process.env.VITE_DEV_SERVER_URL + "#/config" });
-					res.end();
-					return;
-				}
-				const distDir = path$2.join(__dirname, "../dist");
-				const targetPath = path$2.join(distDir, urlPath === "/" ? "index.html" : urlPath);
-				if (!targetPath.startsWith(distDir)) return sendJson(res, 403, {
-					ok: false,
-					message: "Forbidden"
-				});
-				if (fs$1.existsSync(targetPath) && fs$1.statSync(targetPath).isFile()) {
-					const fileContent = fs$1.readFileSync(targetPath);
-					res.writeHead(200, { "Content-Type": getMimeType(targetPath) });
-					res.end(fileContent);
-					return;
-				}
-			}
-			sendJson(res, 404, {
-				ok: false,
-				message: "Not Found"
-			});
-		};
-	}
-	function startConfigServer(deps) {
-		if (deps) serverDeps = deps;
-		const { config } = serverDeps;
-		const desiredPort = config.refreshConfig().webConfig.port;
-		if (configServer && configServerPort === desiredPort) return;
-		if (configServer) {
-			configServer.close();
-			configServer = null;
-			configServerPort = null;
-		}
-		const server = http.createServer(createConfigServerRequestHandler());
-		server.listen(desiredPort, "127.0.0.1", () => {
-			configServerPort = desiredPort;
-			console.log(`Config web server running at http://localhost:${desiredPort}`);
-			broadcastConfigRefresh("startup");
-		});
-		server.on("error", (error) => {
-			console.error("Failed to start config web server:", error);
-		});
-		configServer = server;
-	}
-	module.exports = { startConfigServer };
-}));
-//#endregion
 //#region src/main/windows.js
 var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { BrowserWindow: BrowserWindow$1, screen } = require("electron");
-	var path$1 = require("path");
+	var { BrowserWindow: BrowserWindow$1, screen, shell } = require("electron");
+	var path$2 = require("path");
 	var config = require_config();
-	var IS_WINDOWS = process.platform === "win32";
-	function getScreenBounds() {
-		const cursorPoint = screen.getCursorScreenPoint();
-		return screen.getDisplayNearestPoint(cursorPoint).bounds;
-	}
 	var dragSessions = /* @__PURE__ */ new Map();
 	var floatingButtonWindow = null;
-	var pickCountWindow = null;
-	var isPickCountWindowReady = false;
-	var isFloatingHiddenForPickCount = false;
 	var pickResultWindow = null;
+	var configPanelWindow = null;
+	var isFloatingHiddenForPickCount = false;
 	var isPickResultWindowReady = false;
+	var isDebugMode = false;
+	var isQuitting = false;
 	var currentPickResults = [];
 	var pickResultToken = 0;
 	var activePickResultToken = 0;
+	var floatingExpanded = false;
+	var floatingExpandedSize = null;
 	var floatingWindowWatchdog = null;
-	var isDebugMode = false;
-	var isQuitting = false;
 	var FLOATING_WINDOW_FADE_MS = 400;
 	var WEIGHT_BOOST_GAMMA = 1.5;
 	function setDebugMode(value) {
@@ -2888,17 +2668,88 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function getFloatingButtonWindow() {
 		return floatingButtonWindow;
 	}
-	function getPickCountWindow() {
-		return pickCountWindow;
-	}
 	function getPickResultWindow() {
 		return pickResultWindow;
+	}
+	function getConfigPanelWindow() {
+		return configPanelWindow;
 	}
 	function getCurrentPickResults() {
 		return currentPickResults;
 	}
 	function refreshFloatingButtonWindow() {
 		if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) floatingButtonWindow.close();
+	}
+	function getFloatingButtonWindowSize() {
+		const cfg = config.refreshConfig();
+		const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
+		const base = Math.max(40, sizePx);
+		const ringThickness = Math.round(Math.max(36, base * .7));
+		const ringRadius = Math.round(Math.max(55, base * 1.05)) + Math.round(ringThickness / 2);
+		const windowSize = Math.round(Math.max(340, ringRadius * 2 + 40));
+		return {
+			width: windowSize,
+			height: windowSize
+		};
+	}
+	function clampBoundsToWorkArea(bounds, workArea) {
+		if (!workArea) return bounds;
+		const cfg = config.refreshConfig();
+		const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
+		const paddingX = (bounds.width - sizePx) / 2;
+		const paddingY = (bounds.height - sizePx) / 2;
+		const minX = workArea.x - paddingX;
+		const minY = workArea.y - paddingY;
+		const maxX = workArea.x + workArea.width - bounds.width + paddingX;
+		const maxY = workArea.y + workArea.height - bounds.height + paddingY;
+		return {
+			...bounds,
+			x: Math.max(minX, Math.min(bounds.x, maxX)),
+			y: Math.max(minY, Math.min(bounds.y, maxY))
+		};
+	}
+	function resizeFloatingButtonWindow({ width, height }) {
+		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
+		const current = floatingButtonWindow.getBounds();
+		const centerX = current.x + current.width / 2;
+		const centerY = current.y + current.height / 2;
+		const targetWidth = Math.max(72, Math.round(width));
+		const targetHeight = Math.max(72, Math.round(height));
+		const nextBounds = {
+			x: Math.round(centerX - targetWidth / 2),
+			y: Math.round(centerY - targetHeight / 2),
+			width: targetWidth,
+			height: targetHeight
+		};
+		const display = screen.getDisplayNearestPoint({
+			x: Math.round(centerX),
+			y: Math.round(centerY)
+		});
+		const clamped = clampBoundsToWorkArea(nextBounds, display && display.workArea ? display.workArea : null);
+		floatingButtonWindow.setBounds(clamped, true);
+	}
+	function setFloatingButtonExpanded(payload) {
+		const expanded = Boolean(payload && payload.expanded);
+		floatingExpanded = expanded;
+		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
+		if (expanded) {
+			const size = payload && payload.size ? payload.size : null;
+			const width = size ? Number(size.width) : NaN;
+			const height = size ? Number(size.height) : NaN;
+			if (Number.isFinite(width) && Number.isFinite(height)) {
+				floatingExpandedSize = {
+					width,
+					height
+				};
+				resizeFloatingButtonWindow({
+					width,
+					height
+				});
+				return;
+			}
+		}
+		floatingExpandedSize = null;
+		resizeFloatingButtonWindow(getFloatingButtonWindowSize());
 	}
 	function persistFloatingButtonPosition() {
 		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
@@ -2961,14 +2812,12 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function createFloatingButtonWindow() {
 		if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) return floatingButtonWindow;
 		const cfg = config.refreshConfig();
-		const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
-		const winWidth = Math.max(72, sizePx + 20);
-		const winHeight = Math.max(72, sizePx + 20);
+		const baseSize = getFloatingButtonWindowSize();
 		const hasSavedX = Number.isFinite(Number(cfg.floatingButton.position.x));
 		const hasSavedY = Number.isFinite(Number(cfg.floatingButton.position.y));
 		const windowOptions = {
-			width: winWidth,
-			height: winHeight,
+			width: baseSize.width,
+			height: baseSize.height,
 			frame: false,
 			resizable: false,
 			minimizable: false,
@@ -2980,7 +2829,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			type: isDebugMode ? void 0 : "toolbar",
 			focusable: isDebugMode ? true : process.platform !== "win32",
 			webPreferences: {
-				preload: path$1.join(__dirname, "preload.js"),
+				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
 				nodeIntegration: false,
 				autoplayPolicy: "no-user-gesture-required"
@@ -2992,17 +2841,16 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		const win = new BrowserWindow$1(windowOptions);
 		floatingButtonWindow = win;
+		if (floatingExpanded && floatingExpandedSize) resizeFloatingButtonWindow(floatingExpandedSize);
 		if (cfg.floatingButton.alwaysOnTop) win.setAlwaysOnTop(true, "screen-saver");
-		if (cfg.webConfig && cfg.webConfig.adminTopmostEnabled && typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+		if (cfg.admin && cfg.admin.adminTopmostEnabled && typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 		win.setMenuBarVisibility(false);
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(process.env.VITE_DEV_SERVER_URL);
 		else {
 			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
-			win.loadFile(path$1.join(__dirname, "../dist/index.html"));
+			win.loadFile(path$2.join(__dirname, "../dist/index.html"));
 		}
-		win.webContents.on("context-menu", (event) => {
-			event.preventDefault();
-		});
+		win.webContents.on("context-menu", (event) => event.preventDefault());
 		win.on("hide", () => {
 			if (isQuitting || isFloatingHiddenForPickCount) return;
 			setTimeout(() => {
@@ -3045,89 +2893,12 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			floatingWindowWatchdog = null;
 		}
 	}
-	function closePickCountWindow(options = {}) {
-		const keepFloatingHidden = Boolean(options.keepFloatingHidden);
-		if (!pickCountWindow || pickCountWindow.isDestroyed()) {
-			if (!keepFloatingHidden) {
-				isFloatingHiddenForPickCount = false;
-				fadeInFloatingButtonWindow();
-			}
-			return;
-		}
-		if (pickCountWindow.isVisible()) pickCountWindow.hide();
-		if (keepFloatingHidden) {
-			isFloatingHiddenForPickCount = true;
-			return;
-		}
-		isFloatingHiddenForPickCount = false;
-		fadeInFloatingButtonWindow();
-	}
-	function createPickCountWindowInstance() {
-		if (pickCountWindow && !pickCountWindow.isDestroyed()) return;
-		const bounds = getScreenBounds();
-		const win = new BrowserWindow$1({
-			x: bounds.x,
-			y: bounds.y,
-			width: bounds.width,
-			height: bounds.height,
-			show: false,
-			frame: false,
-			transparent: true,
-			resizable: false,
-			minimizable: false,
-			maximizable: false,
-			movable: false,
-			alwaysOnTop: true,
-			skipTaskbar: !isDebugMode,
-			webPreferences: {
-				preload: path$1.join(__dirname, "preload.js"),
-				contextIsolation: true,
-				nodeIntegration: false,
-				autoplayPolicy: "no-user-gesture-required"
-			}
-		});
-		if (IS_WINDOWS) win.setAlwaysOnTop(true, "screen-saver");
-		pickCountWindow = win;
-		isPickCountWindowReady = false;
-		win.setMenuBarVisibility(false);
-		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pick-count`);
-		else win.loadURL(`file://${path$1.join(__dirname, "../dist/index.html")}#/pick-count`);
-		if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
-		win.once("ready-to-show", () => {
-			isPickCountWindowReady = true;
-		});
-		win.on("closed", () => {
-			pickCountWindow = null;
-			isPickCountWindowReady = false;
-			if (!isQuitting) fadeInFloatingButtonWindow();
-		});
-	}
-	function createPickCountWindow() {
-		createPickCountWindowInstance();
-		if (!pickCountWindow || pickCountWindow.isDestroyed()) return;
-		const openPickCountWindow = () => {
-			if (!pickCountWindow || pickCountWindow.isDestroyed()) return;
-			if (IS_WINDOWS) {
-				const bounds = getScreenBounds();
-				pickCountWindow.setBounds(bounds);
-				pickCountWindow.setAlwaysOnTop(true, "screen-saver");
-			}
-			pickCountWindow.webContents.send("pick-count:open");
-			pickCountWindow.show();
-			pickCountWindow.focus();
-		};
-		if (isPickCountWindowReady) openPickCountWindow();
-		else pickCountWindow.once("ready-to-show", openPickCountWindow);
-		isFloatingHiddenForPickCount = true;
-		fadeOutFloatingButtonWindow();
-	}
 	function closePickResultWindow() {
 		if (!pickResultWindow || pickResultWindow.isDestroyed()) {
 			currentPickResults = [];
 			activePickResultToken = 0;
 			isFloatingHiddenForPickCount = false;
 			fadeInFloatingButtonWindow();
-			if (pickCountWindow && !pickCountWindow.isDestroyed()) pickCountWindow.webContents.send("pick-count:stop-bgm");
 			return;
 		}
 		if (pickResultWindow.isVisible()) pickResultWindow.hide();
@@ -3135,19 +2906,14 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		activePickResultToken = 0;
 		isFloatingHiddenForPickCount = false;
 		fadeInFloatingButtonWindow();
-		if (pickCountWindow && !pickCountWindow.isDestroyed()) pickCountWindow.webContents.send("pick-count:stop-bgm");
 	}
 	function createPickResultWindowInstance() {
 		if (pickResultWindow && !pickResultWindow.isDestroyed()) return;
-		const bounds = getScreenBounds();
 		const win = new BrowserWindow$1({
-			x: bounds.x,
-			y: bounds.y,
-			width: bounds.width,
-			height: bounds.height,
 			show: false,
 			frame: false,
 			transparent: true,
+			fullscreen: true,
 			resizable: false,
 			minimizable: false,
 			maximizable: false,
@@ -3155,18 +2921,17 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			alwaysOnTop: true,
 			skipTaskbar: !isDebugMode,
 			webPreferences: {
-				preload: path$1.join(__dirname, "preload.js"),
+				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
 				nodeIntegration: false,
 				autoplayPolicy: "no-user-gesture-required"
 			}
 		});
-		if (IS_WINDOWS) win.setAlwaysOnTop(true, "screen-saver");
 		pickResultWindow = win;
 		isPickResultWindowReady = false;
 		win.setMenuBarVisibility(false);
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pick-result`);
-		else win.loadURL(`file://${path$1.join(__dirname, "../dist/index.html")}#/pick-result`);
+		else win.loadURL(`file://${path$2.join(__dirname, "../dist/index.html")}#/pick-result`);
 		if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 		win.once("ready-to-show", () => {
 			isPickResultWindowReady = true;
@@ -3186,11 +2951,6 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (!pickResultWindow || pickResultWindow.isDestroyed()) return;
 		const openResultWindow = () => {
 			if (!pickResultWindow || pickResultWindow.isDestroyed()) return;
-			if (IS_WINDOWS) {
-				const bounds = getScreenBounds();
-				pickResultWindow.setBounds(bounds);
-				pickResultWindow.setAlwaysOnTop(true, "screen-saver");
-			}
 			pickResultWindow.webContents.send("pick-result:open", {
 				token: activePickResultToken,
 				results: currentPickResults
@@ -3202,9 +2962,6 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		else pickResultWindow.once("ready-to-show", openResultWindow);
 		isFloatingHiddenForPickCount = true;
 		fadeOutFloatingButtonWindow();
-	}
-	function sendPickCountStopBgm() {
-		if (pickCountWindow && !pickCountWindow.isDestroyed()) pickCountWindow.webContents.send("pick-count:stop-bgm");
 	}
 	function getDragSession(eventId) {
 		return dragSessions.get(eventId);
@@ -3250,9 +3007,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		if (pool.length === 0 || count <= 0) return [];
 		const targetCount = Math.max(0, count);
 		const picked = [];
-		const allowRepeatDraw = Boolean(cfg.allowRepeatDraw);
-		if (pool.length === 0) return picked;
-		if (allowRepeatDraw) {
+		if (Boolean(cfg.allowRepeatDraw)) {
 			const weightedPool = pool.map((s) => ({
 				name: s.name,
 				weight: Math.pow(s.weight, WEIGHT_BOOST_GAMMA)
@@ -3297,26 +3052,80 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		return picked;
 	}
+	function createConfigPanelWindow() {
+		if (configPanelWindow && !configPanelWindow.isDestroyed()) {
+			configPanelWindow.show();
+			configPanelWindow.focus();
+			configPanelWindow.webContents.send("config-panel:refresh");
+			return configPanelWindow;
+		}
+		const win = new BrowserWindow$1({
+			width: 550,
+			height: 640,
+			resizable: false,
+			minimizable: false,
+			maximizable: false,
+			frame: false,
+			transparent: true,
+			show: false,
+			alwaysOnTop: true,
+			skipTaskbar: !isDebugMode,
+			webPreferences: {
+				preload: path$2.join(__dirname, "preload.js"),
+				contextIsolation: true,
+				nodeIntegration: false
+			}
+		});
+		configPanelWindow = win;
+		win.setMenuBarVisibility(false);
+		win.webContents.setWindowOpenHandler(({ url }) => {
+			shell.openExternal(url);
+			return { action: "deny" };
+		});
+		win.once("ready-to-show", () => {
+			win.show();
+			win.focus();
+			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
+		});
+		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
+		else win.loadURL(`file://${path$2.join(__dirname, "../dist/index.html")}#/config-panel`);
+		win.on("closed", () => {
+			configPanelWindow = null;
+			fadeInFloatingButtonWindow();
+		});
+		return win;
+	}
+	function openConfigPanelWindow() {
+		isFloatingHiddenForPickCount = true;
+		fadeOutFloatingButtonWindow();
+		createConfigPanelWindow();
+	}
+	function closeConfigPanelWindow(saved) {
+		isFloatingHiddenForPickCount = false;
+		if (saved) refreshFloatingButtonWindow();
+		if (configPanelWindow && !configPanelWindow.isDestroyed()) configPanelWindow.close();
+		configPanelWindow = null;
+	}
 	module.exports = {
-		closePickCountWindow,
+		closeConfigPanelWindow,
 		closePickResultWindow,
+		createConfigPanelWindow,
 		createFloatingButtonWindow,
-		createPickCountWindow,
-		createPickCountWindowInstance,
 		createPickResultWindowInstance,
 		fadeInFloatingButtonWindow,
+		getConfigPanelWindow,
 		getCurrentPickResults,
 		getFloatingButtonWindow,
-		getPickCountWindow,
 		getPickResultWindow,
 		handleDragEnd,
 		handleDragMove,
 		handleDragStart,
+		openConfigPanelWindow,
 		openPickResultWindow,
 		persistFloatingButtonPosition,
 		pickStudentsByWeight,
 		refreshFloatingButtonWindow,
-		sendPickCountStopBgm,
+		setFloatingButtonExpanded,
 		setDebugMode,
 		setIgnoreMouseEvents,
 		setQuitting,
@@ -3325,171 +3134,9 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	};
 }));
 //#endregion
-//#region src/main/ipc.js
-var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { ipcMain: ipcMain$1 } = require("electron");
-	var config = require_config();
-	var windows = require_windows();
-	function registerIpcHandlers() {
-		ipcMain$1.handle("floating-button:get-config", () => {
-			return config.refreshConfig().floatingButton;
-		});
-		ipcMain$1.on("floating-button:clicked", () => {
-			windows.createPickCountWindow();
-		});
-		ipcMain$1.handle("pick-count:get-config", () => {
-			return config.refreshConfig().pickCountDialog;
-		});
-		ipcMain$1.on("pick-count:cancel", () => {
-			windows.closePickCountWindow();
-			windows.sendPickCountStopBgm();
-		});
-		ipcMain$1.on("pick-count:confirm", (_event, payload) => {
-			const selectedCount = Math.round(Number(payload && payload.count)) || 1;
-			const count = Math.min(10, Math.max(1, selectedCount));
-			const playMusic = Boolean(payload && payload.playMusic);
-			console.log(`Pick count confirmed. count=${count}, playMusic=${playMusic}`);
-			const pickedStudents = windows.pickStudentsByWeight(count);
-			if (pickedStudents.length > 0) console.log(`Picked students: ${pickedStudents.map((s) => s.name).join(", ")}`);
-			windows.closePickCountWindow({ keepFloatingHidden: true });
-			windows.openPickResultWindow(pickedStudents);
-		});
-		ipcMain$1.handle("pick-result:get-results", () => {
-			return windows.getCurrentPickResults();
-		});
-		ipcMain$1.handle("pick-result:get-config", () => {
-			return config.refreshConfig().pickResultDialog;
-		});
-		ipcMain$1.on("pick-result:close", () => {
-			windows.closePickResultWindow();
-		});
-		ipcMain$1.on("floating-button:drag-start", (event) => {
-			windows.handleDragStart(event);
-		});
-		ipcMain$1.on("floating-button:drag-move", (event, payload) => {
-			windows.handleDragMove(event, payload);
-		});
-		ipcMain$1.on("floating-button:drag-end", (event) => {
-			windows.handleDragEnd(event);
-		});
-		ipcMain$1.on("floating-button:set-ignore-mouse", (event, ignore) => {
-			windows.setIgnoreMouseEvents(event, ignore);
-		});
-	}
-	module.exports = { registerIpcHandlers };
-}));
-//#endregion
-//#region src/main/logging.js
-var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var LOG_BUFFER_LIMIT = 600;
-	var logBuffer = [];
-	var logClients = /* @__PURE__ */ new Set();
-	function pushLog(level, text) {
-		const time = (/* @__PURE__ */ new Date()).toISOString();
-		const entry = {
-			id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-			level,
-			text: String(text),
-			time
-		};
-		logBuffer.push(entry);
-		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
-		const payload = `data: ${JSON.stringify(entry)}\n\n`;
-		for (const res of logClients) res.write(payload);
-	}
-	function attachConsoleLogger() {
-		[
-			"log",
-			"info",
-			"warn",
-			"error"
-		].forEach((method) => {
-			const original = console[method].bind(console);
-			console[method] = (...args) => {
-				const text = args.map((arg) => {
-					if (typeof arg === "string") return arg;
-					try {
-						return JSON.stringify(arg);
-					} catch (_error) {
-						return String(arg);
-					}
-				}).join(" ");
-				pushLog(method === "log" ? "info" : method, text);
-				original(...args);
-			};
-		});
-	}
-	function registerRendererLogIpc(ipcMain) {
-		ipcMain.on("renderer:log", (_event, payload) => {
-			if (!payload || typeof payload.text !== "string") return;
-			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
-		});
-	}
-	function handleLogStream(req, res) {
-		res.writeHead(200, {
-			"Content-Type": "text/event-stream; charset=utf-8",
-			"Cache-Control": "no-cache",
-			"Connection": "keep-alive",
-			"X-Accel-Buffering": "no"
-		});
-		res.write("\n");
-		logClients.add(res);
-		logBuffer.forEach((entry) => {
-			res.write(`data: ${JSON.stringify(entry)}\n\n`);
-		});
-		req.on("close", () => {
-			logClients.delete(res);
-		});
-	}
-	module.exports = {
-		attachConsoleLogger,
-		handleLogStream,
-		pushLog,
-		registerRendererLogIpc
-	};
-}));
-//#endregion
-//#region src/main/tray-menu.js
-var require_tray_menu = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { Menu } = require("electron");
-	function buildTrayContextMenu({ onOpenConfig, onQuit }) {
-		return Menu.buildFromTemplate([{
-			label: "配置",
-			click: () => {
-				if (typeof onOpenConfig === "function") onOpenConfig();
-			}
-		}, {
-			label: "退出",
-			click: () => {
-				if (typeof onQuit === "function") onQuit();
-			}
-		}]);
-	}
-	module.exports = { buildTrayContextMenu };
-}));
-//#endregion
-//#region src/main/tray.js
-var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { Tray, nativeImage } = require("electron");
-	var path = require("path");
-	var { buildTrayContextMenu } = require_tray_menu();
-	function createTray({ onOpenConfig, onQuit }) {
-		const trayIconPath = !!process.env.VITE_DEV_SERVER_URL ? path.join(__dirname, "../public/image/tray.png") : path.join(__dirname, "../dist/image/tray.png");
-		const tray = new Tray(nativeImage.createFromPath(trayIconPath));
-		tray.setToolTip("Blue Random");
-		const trayMenu = buildTrayContextMenu({
-			onOpenConfig,
-			onQuit
-		});
-		tray.setContextMenu(trayMenu);
-		return tray;
-	}
-	module.exports = { createTray };
-}));
-//#endregion
 //#region src/main/update.js
 var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	var { app: app$1, net } = require("electron");
+	var { app: app$3, net } = require("electron");
 	function parseVersionYaml(text) {
 		const lines = String(text || "").split(/\r?\n/);
 		const data = {};
@@ -3545,7 +3192,7 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const repoOwner = "Yun-Hydrogen";
 		const repoName = "ba_random_electron";
 		const debug = [];
-		const localVersion = app$1.getVersion();
+		const localVersion = app$3.getVersion();
 		const releaseApi = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
 		debug.push(`GET ${releaseApi}`);
 		const releaseResp = await fetchUrl(releaseApi);
@@ -3623,8 +3270,8 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		return {
 			ok: true,
 			status: "easter",
-			title: `这是为什么呢？${localVersion}`,
-			detail: "看起来你正在使用来自未来的版本...",
+			title: `这是为什么呢？本地版本为：${localVersion}`,
+			detail: `远端版本为：${remoteVersion}，看起来你正在使用来自未来的版本...`,
 			commitUrl,
 			releaseUrl: release.html_url || `https://github.com/${repoOwner}/${repoName}/releases/latest`,
 			localVersion,
@@ -3635,12 +3282,286 @@ var require_update = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = { checkUpdateFromMain };
 }));
 //#endregion
+//#region src/main/logging.js
+var require_logging = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var fs$2 = require("fs");
+	var path$1 = require("path");
+	var { app: app$2 } = require("electron");
+	var _logFilePath = null;
+	function getLogFilePath() {
+		if (!_logFilePath) _logFilePath = path$1.join(app$2.getPath("userData"), "log.txt");
+		return _logFilePath;
+	}
+	function initLogFile() {
+		const p = getLogFilePath();
+		const dir = path$1.dirname(p);
+		if (!fs$2.existsSync(dir)) fs$2.mkdirSync(dir, { recursive: true });
+		fs$2.writeFileSync(p, "", "utf8");
+	}
+	var LOG_BUFFER_LIMIT = 600;
+	var logBuffer = [];
+	var writeQueue = Promise.resolve();
+	function pushLog(level, text) {
+		const time = (/* @__PURE__ */ new Date()).toISOString();
+		const entry = {
+			id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+			level,
+			text: String(text),
+			time
+		};
+		logBuffer.push(entry);
+		if (logBuffer.length > LOG_BUFFER_LIMIT) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_LIMIT);
+		const line = JSON.stringify(entry) + "\n";
+		writeQueue = writeQueue.then(() => {
+			return new Promise((resolve) => {
+				fs$2.appendFile(getLogFilePath(), line, "utf8", (err) => {
+					if (err) (console.error.bind ? console.error.bind(console) : console.error)("[logging] 日志写入磁盘失败:", err.message);
+					resolve();
+				});
+			});
+		});
+	}
+	function getLogs(maxLines = 500) {
+		return writeQueue.then(() => {
+			return new Promise((resolve) => {
+				fs$2.readFile(getLogFilePath(), "utf8", (err, data) => {
+					if (err) return resolve([]);
+					const recent = data.split("\n").filter((line) => line.trim()).slice(-maxLines);
+					const entries = [];
+					for (const line of recent) try {
+						entries.push(JSON.parse(line));
+					} catch (_) {}
+					entries.reverse();
+					resolve(entries);
+				});
+			});
+		});
+	}
+	function attachConsoleLogger() {
+		[
+			"log",
+			"info",
+			"warn",
+			"error"
+		].forEach((method) => {
+			const original = console[method].bind(console);
+			console[method] = (...args) => {
+				const text = args.map((arg) => {
+					if (typeof arg === "string") return arg;
+					try {
+						return JSON.stringify(arg);
+					} catch (_error) {
+						return String(arg);
+					}
+				}).join(" ");
+				pushLog(method === "log" ? "info" : method, text);
+				original(...args);
+			};
+		});
+	}
+	function registerRendererLogIpc(ipcMain) {
+		ipcMain.on("renderer:log", (_event, payload) => {
+			if (!payload || typeof payload.text !== "string") return;
+			pushLog(typeof payload.level === "string" ? payload.level : "info", payload.text);
+		});
+	}
+	function registerGetLogsIpc(ipcMain) {
+		ipcMain.handle("config-panel:get-logs", async (_event, maxLines) => {
+			return getLogs(typeof maxLines === "number" ? maxLines : 500);
+		});
+	}
+	module.exports = {
+		initLogFile,
+		attachConsoleLogger,
+		pushLog,
+		getLogs,
+		registerRendererLogIpc,
+		registerGetLogsIpc
+	};
+}));
+//#endregion
+//#region src/main/ipc.js
+var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var { ipcMain: ipcMain$1, app: app$1, dialog } = require("electron");
+	var fs$1 = require("fs");
+	var config = require_config();
+	var windows = require_windows();
+	var admin = require_admin();
+	var update = require_update();
+	var logging = require_logging();
+	function registerIpcHandlers() {
+		ipcMain$1.handle("floating-button:get-config", () => {
+			return config.refreshConfig().floatingButton;
+		});
+		ipcMain$1.handle("floating-picker:get-config", () => {
+			return config.refreshConfig().pickCountDialog;
+		});
+		ipcMain$1.on("floating-picker:confirm", (_event, payload) => {
+			const selectedCount = Math.round(Number(payload && payload.count)) || 1;
+			const count = Math.min(10, Math.max(1, selectedCount));
+			console.log(`Pick count confirmed. count=${count}`);
+			const pickedStudents = windows.pickStudentsByWeight(count);
+			if (pickedStudents.length > 0) console.log(`Picked students: ${pickedStudents.map((s) => s.name).join(", ")}`);
+			windows.openPickResultWindow(pickedStudents);
+		});
+		ipcMain$1.handle("pick-result:get-results", () => {
+			return windows.getCurrentPickResults();
+		});
+		ipcMain$1.handle("pick-result:get-config", () => {
+			return config.refreshConfig().pickResultDialog;
+		});
+		ipcMain$1.on("pick-result:close", () => {
+			windows.closePickResultWindow();
+		});
+		ipcMain$1.on("floating-button:drag-start", (event) => {
+			windows.handleDragStart(event);
+		});
+		ipcMain$1.on("floating-button:drag-move", (event, payload) => {
+			windows.handleDragMove(event, payload);
+		});
+		ipcMain$1.on("floating-button:drag-end", (event) => {
+			windows.handleDragEnd(event);
+		});
+		ipcMain$1.on("floating-button:set-ignore-mouse", (event, ignore) => {
+			windows.setIgnoreMouseEvents(event, ignore);
+		});
+		ipcMain$1.on("floating-button:set-expanded", (_event, payload) => {
+			windows.setFloatingButtonExpanded(payload);
+		});
+	}
+	function registerConfigPanelIpc() {
+		ipcMain$1.handle("config-panel:get-config", () => {
+			return config.refreshConfig();
+		});
+		ipcMain$1.handle("config-panel:save-config", (_event, payload) => {
+			const normalized = config.normalizeConfig(payload);
+			config.saveConfig(normalized);
+			windows.refreshFloatingButtonWindow();
+			return { ok: true };
+		});
+		ipcMain$1.on("config-panel:close", (_event, payload) => {
+			windows.closeConfigPanelWindow(Boolean(payload && payload.saved));
+		});
+		ipcMain$1.handle("config-panel:get-app-info", () => {
+			return {
+				isAdmin: admin.isProcessElevated(),
+				isUiAccess: process.argv.includes(admin.UIACCESS_ARG),
+				isWindows: admin.IS_WINDOWS,
+				uiAccessDllExists: fs$1.existsSync(admin.getDefaultUiAccessDllPath()),
+				configPath: config.getConfigPath(),
+				configDir: config.getConfigDir(),
+				exePath: admin.getDefaultExePath(),
+				version: app$1.getVersion()
+			};
+		});
+		ipcMain$1.handle("config-panel:admin-elevate", () => {
+			const result = admin.requestAdminRelaunch();
+			if (result.ok) {
+				windows.setQuitting(true);
+				setTimeout(() => app$1.exit(0), 150);
+			}
+			return result;
+		});
+		ipcMain$1.handle("config-panel:restart", () => {
+			windows.setQuitting(true);
+			setTimeout(() => {
+				app$1.relaunch();
+				app$1.exit(0);
+			}, 80);
+			return { ok: true };
+		});
+		ipcMain$1.handle("config-panel:create-startup-task", (_event, payload) => {
+			return admin.createAdminStartupTask({
+				taskName: payload.taskName,
+				exePath: payload.exePath
+			});
+		});
+		ipcMain$1.handle("config-panel:open-config-file", () => {
+			return config.openConfigFile();
+		});
+		ipcMain$1.handle("config-panel:open-config-dir", () => {
+			return config.openConfigDir();
+		});
+		ipcMain$1.handle("config-panel:check-update", () => {
+			return update.checkUpdateFromMain();
+		});
+		ipcMain$1.handle("config-panel:pick-exe-file", async () => {
+			const result = await dialog.showOpenDialog({
+				title: "选择可执行文件",
+				filters: [{
+					name: "可执行文件",
+					extensions: ["exe"]
+				}, {
+					name: "所有文件",
+					extensions: ["*"]
+				}],
+				properties: ["openFile"]
+			});
+			if (result.canceled || result.filePaths.length === 0) return null;
+			return result.filePaths[0];
+		});
+		ipcMain$1.handle("config-panel:reset-config", () => {
+			config.saveConfig(config.normalizeConfig({}));
+			windows.refreshFloatingButtonWindow();
+			return { ok: true };
+		});
+		ipcMain$1.handle("config-panel:get-logs", async (_event, maxLines) => {
+			return logging.getLogs(typeof maxLines === "number" ? maxLines : 500);
+		});
+	}
+	module.exports = {
+		registerIpcHandlers,
+		registerConfigPanelIpc
+	};
+}));
+//#endregion
+//#region src/main/tray-menu.js
+var require_tray_menu = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var { Menu } = require("electron");
+	function buildTrayContextMenu({ onOpenConfig, onQuit }) {
+		return Menu.buildFromTemplate([{
+			label: "配置",
+			click: () => {
+				if (typeof onOpenConfig === "function") onOpenConfig();
+			}
+		}, {
+			label: "退出",
+			click: () => {
+				if (typeof onQuit === "function") onQuit();
+			}
+		}]);
+	}
+	module.exports = { buildTrayContextMenu };
+}));
+//#endregion
+//#region src/main/tray.js
+var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var { Tray, nativeImage } = require("electron");
+	var path = require("path");
+	var { buildTrayContextMenu } = require_tray_menu();
+	function createTray({ onOpenConfig, onQuit }) {
+		const trayIconPath = !!process.env.VITE_DEV_SERVER_URL ? path.join(__dirname, "../public/image/tray.png") : path.join(__dirname, "../dist/image/tray.png");
+		const tray = new Tray(nativeImage.createFromPath(trayIconPath));
+		tray.setToolTip("Blue Random");
+		const trayMenu = buildTrayContextMenu({
+			onOpenConfig,
+			onQuit
+		});
+		tray.setContextMenu(trayMenu);
+		return tray;
+	}
+	module.exports = { createTray };
+}));
+//#endregion
 //#region src/main/main.js
 var { app, BrowserWindow, ipcMain } = require("electron");
 var fs = require("fs");
+var { execSync } = require("child_process");
+if (process.platform === "win32") try {
+	execSync("chcp 65001", { stdio: "ignore" });
+} catch {}
 var admin = require_admin();
 var config = require_config();
-var configServer = require_config_server();
 var ipc = require_ipc();
 var logging = require_logging();
 var tray = require_tray();
@@ -3662,7 +3583,8 @@ process.on("unhandledRejection", (reason) => {
 ipc.registerIpcHandlers();
 app.whenReady().then(() => {
 	const startupConfig = config.refreshConfig();
-	if (startupConfig.webConfig && startupConfig.webConfig.uiAccessEnabled && admin.IS_WINDOWS && !admin.IS_UIACCESS_PROCESS) {
+	logging.initLogFile();
+	if (startupConfig.admin && startupConfig.admin.uiAccessEnabled && admin.IS_WINDOWS && !admin.IS_UIACCESS_PROCESS) {
 		if (admin.isProcessElevated()) {
 			const dllPath = admin.getDefaultUiAccessDllPath();
 			if (fs.existsSync(dllPath)) {
@@ -3676,26 +3598,18 @@ app.whenReady().then(() => {
 			} else console.error("UIAccess dll missing:", dllPath);
 		}
 	}
-	if (startupConfig.webConfig && startupConfig.webConfig.adminTopmostEnabled && admin.IS_WINDOWS && !admin.isProcessElevated()) {
+	if (startupConfig.admin && startupConfig.admin.adminTopmostEnabled && admin.IS_WINDOWS && !admin.isProcessElevated()) {
 		if (admin.requestAdminRelaunch().ok) {
 			windows.setQuitting(true);
 			app.exit(0);
 			return;
 		}
 	}
-	configServer.startConfigServer({
-		app,
-		isDebugMode,
-		config,
-		update,
-		logging,
-		windows,
-		admin
-	});
 	tray.createTray({
-		onOpenConfig: () => config.openConfigPageInBrowser(),
+		onOpenConfig: () => windows.openConfigPanelWindow(),
 		onQuit: () => app.quit()
 	});
+	ipc.registerConfigPanelIpc();
 	update.checkUpdateFromMain().then((res) => {
 		if (res.ok && res.status === "update") {
 			const { Notification, shell } = require("electron");
@@ -3714,7 +3628,6 @@ app.whenReady().then(() => {
 		console.error("Auto update check failed:", err);
 	});
 	windows.createFloatingButtonWindow();
-	windows.createPickCountWindowInstance();
 	windows.createPickResultWindowInstance();
 	windows.startFloatingWindowWatchdog();
 	app.on("activate", () => {

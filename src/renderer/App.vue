@@ -1,3 +1,29 @@
+<!--
+# App.vue 维护说明
+
+本文总结 [src/renderer/App.vue](src/renderer/App.vue) 的结构与方法，便于后续 AI 维护。
+
+## 模块概览
+- 作用：Vue 应用根组件，提供 `<router-view />` 插槽并根据路由切换全局样式。
+- 技术：Vue 3 `<script setup>` + `vue-router`。
+
+## 页面结构（Template）
+- `<router-view />`：由 `src/renderer/router/index.js` 决定渲染 Floating / PickResult / ConfigPanel。
+
+## 关键逻辑
+- `watch(route.path)`：监听路由变化，当路径为 `/config` 时为 `<html>` 和 `<body>` 添加 `is-config-page` class，其余路径移除。
+  - `is-config-page`：启用不透明背景、允许滚动、允许文本选择（配置页）。
+  - 无 `is-config-page`：透明背景、禁止溢出、禁止文本选择（悬浮窗/结果页）。
+
+## 全局样式
+- `* { box-sizing: border-box; }` 统一盒模型。
+- `html, body, #app` 全屏填充，无 margin/padding。
+- 非配置页：`background: transparent; overflow: hidden; user-select: none;`。
+- 配置页：继承默认背景与滚动行为。
+
+## 维护注意事项
+- 新增路由页面时，若其需要与配置页不同的全局样式，需在此处 `watch` 中添加对应 class 控制。
+-->
 <template>
   <router-view />
 </template>
@@ -34,7 +60,7 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  font-family: 'UI', 'Bahnschrift', 'Microsoft YaHei UI', sans-serif;
 }
 
 html:not(.is-config-page),
