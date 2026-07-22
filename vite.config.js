@@ -13,7 +13,7 @@ import renderer from 'vite-plugin-electron-renderer'
 import path from 'path'
 
 export default defineConfig({
-  // Vite + Electron 主进程/预加载/渲染进程配置
+  base: './',  // 生产构建使用相对路径，兼容 Electron file:// 协议
   plugins: [
     vue(),
     electron({
@@ -32,7 +32,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src/renderer')
     }
   },
+  build: {
+    // esbuild 压缩比 terser 快 20-40 倍
+    minify: 'esbuild',
+    // 目标 Chrome 版本（Electron 37 基于 Chromium 134）
+    target: 'chrome134',
+    // 启用构建缓存（Vite 8 持久化缓存到 node_modules/.vite）
+    // 首次构建后，未修改模块直接复用缓存
+  },
   server: {
     port: 5173
-  }
+  },
+  // 持久化缓存目录
+  cacheDir: 'node_modules/.vite',
 })

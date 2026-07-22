@@ -8,8 +8,9 @@
 ================================================================================
   require('electron')      → Electron 框架：app（生命周期）、BrowserWindow（窗口）、
                              ipcMain（进程通信）、shell（系统外壳）、Notification（通知）
-  require('fs')            → 文件系统，检查 uiaccess.dll 是否存在
+  require('fs')            → 文件系统，检查 uiaccess.dll 是否存在、读取 config.yml
   require('child_process') → 执行 chcp 命令设置终端编码
+  require('js-yaml')       → YAML 解析器，启动前读取配置判断穿透策略
   require('./admin')       → Windows 权限模块
   require('./config')      → 配置读写模块
   require('./ipc')         → IPC 通道注册模块
@@ -21,20 +22,22 @@
 ================================================================================
 启动流程（按时间顺序）
 ================================================================================
-  1. 设置命令行参数（音频自动播放、UIAccess 渲染修复）
-  2. 初始化用户数据目录 + 日志系统
-  3. 注册全局异常处理器
-  4. 注册第 1 组 IPC 通道（悬浮按钮 + 抽取功能）
-  5. app.whenReady() 触发：
+  1. 设置命令行参数（音频自动播放）
+  2. 初始化用户数据目录 → 读取 config.yml → 根据 renderingBackend /
+     disableDirectComposition / disableHardwareAcceleration 设置 Chromium 标志
+  3. 初始化日志系统
+  4. 注册全局异常处理器
+  5. 注册第 1 组 IPC 通道（悬浮按钮 + 抽取功能）
+  6. app.whenReady() 触发：
      a. 检查 UIAccess 配置 → 如需启动则通过 rundll32 重启并退出
      b. 检查管理员配置 → 如需提权则通过 RunAs 重启并退出
-     c. 创建系统托盘（右键菜单：配置 / 退出）
+     c. 创建系统托盘（右键菜单：配置 / 重启 / 退出）
      d. 注册第 2 组 IPC 通道（配置面板专用）
      e. 异步检查更新（有新版本弹出系统通知）
      f. 预创建窗口（悬浮按钮 + 抽取结果）并启动看门狗
      g. 绑定 macOS activate 事件（Dock 点击时重建悬浮窗）
-  6. 绑定 before-quit → 保存状态
-  7. 绑定 window-all-closed → 驻留托盘不退出
+  7. 绑定 before-quit → 保存状态
+  8. 绑定 window-all-closed → 驻留托盘不退出
 
 ================================================================================
 维护建议
@@ -105,27 +108,60 @@ const isDebugMode = !!process.env.VITE_DEV_SERVER_URL
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 /*
- * UIAccess 进程的渲染修复。
- *
- * 当应用以 UIAccess 权限运行时，Windows DirectComposition（DWM 合成）
- * 会导致透明无边框窗口的渲染异常（动画帧冻结在初始帧）。
- *
- * 解决方法：通过 --disable-direct-composition 命令行参数关闭该功能。
- * 仅在检测到当前进程为 UIAccess 模式时启用（通过 --uiaccess 参数判断）。
- */
-if (admin.IS_UIACCESS_PROCESS) {
-  app.commandLine.appendSwitch('disable-direct-composition');
-}
-
-// ============================================================================
-//  初始化（在 app.whenReady() 之前执行）
-// ============================================================================
-
-/*
  * 将 userData 目录重定向到 %LocalAppData%\BlueRandom。
- * 必须在 app.whenReady() 之前调用，否则后续文件操作会使用默认路径。
+ * 必须在读取配置文件之前调用。
  */
 admin.configureUserDataPath();
+
+/*
+ * 渲染后端配置（全模式通用，需重启生效）：
+ *
+ *   renderingBackend（默认 d3d9）：
+ *     D3D9 不依赖 DXGI/DirectComposition，使用自有呈现路径。
+ *     UIAccess 下 D3D9 的 DWM 旧版兼容层不受限制，原生 GPU 呈现。
+ *     可选值：d3d9 / vulkan / gl。
+ *
+ *   disableDirectComposition（默认 true）：
+ *     与 renderingBackend 可组合测试。
+ *
+ *   disableHardwareAcceleration（默认 false）：
+ *     启用时 app.disableHardwareAcceleration() 完全回退到 CPU 软件渲染。
+ *
+ *   首次启动无配置文件时使用默认值（d3d9 + disable-direct-composition）。
+ */
+try {
+  const fs = require('fs');
+  const path = require('path');
+  const yaml = require('js-yaml');
+  const cfgPath = path.join(app.getPath('userData'), 'config.yml');
+  if (fs.existsSync(cfgPath)) {
+    const raw = yaml.load(fs.readFileSync(cfgPath, 'utf8'));
+    const backend = (raw?.admin?.renderingBackend || 'd3d9').toLowerCase();
+
+    if (backend === 'vulkan') {
+      app.commandLine.appendSwitch('use-angle', 'vulkan');
+    } else if (backend === 'gl') {
+      app.commandLine.appendSwitch('use-angle', 'gl');
+    } else {
+      /* d3d9（默认） */
+      app.commandLine.appendSwitch('use-angle', 'd3d9');
+    }
+
+    /* disableDirectComposition：默认 true，与 renderingBackend 可组合 */
+    if (raw?.admin?.disableDirectComposition !== false) {
+      app.commandLine.appendSwitch('disable-direct-composition');
+    }
+
+    /* disableHardwareAcceleration：默认 false，启用时全 CPU 软件渲染 */
+    if (raw?.admin?.disableHardwareAcceleration === true) {
+      app.disableHardwareAcceleration();
+    }
+  } else {
+    /* 首次启动无配置文件，使用默认 d3d9 + disable-direct-composition */
+    app.commandLine.appendSwitch('use-angle', 'd3d9');
+    app.commandLine.appendSwitch('disable-direct-composition');
+  }
+} catch (_) { /* 配置文件不存在或格式错误，静默跳过 */ }
 windows.setDebugMode(isDebugMode);
 
 /* 劫持 console，使所有主进程日志进入统一缓冲 */
@@ -211,28 +247,7 @@ app.whenReady().then(() => {
   }
 
   // --------------------------------------------------------------------------
-  //  第 2 步：检查是否需要管理员提权重启
-  //
-  //  触发条件（全部满足）：
-  //    1. 配置中 adminTopmostEnabled = true
-  //    2. 当前运行在 Windows 上
-  //    3. 当前进程不是管理员（避免无限循环重启）
-  //
-  //  如果满足条件：通过 PowerShell Start-Process -Verb RunAs 启动新进程，
-  //  触发 UAC 弹窗，用户确认后新进程获得管理员权限。
-  // --------------------------------------------------------------------------
-  if (startupConfig.admin && startupConfig.admin.adminTopmostEnabled
-    && admin.IS_WINDOWS && !admin.isProcessElevated()) {
-    const result = admin.requestAdminRelaunch();
-    if (result.ok) {
-      windows.setQuitting(true);
-      app.exit(0);
-      return;
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  //  第 3 步：以下代码仅在"无需重启"时执行
+  //  第 2 步：以下代码仅在"无需重启"时执行
   //          即：权限已满足，或用户未启用提权功能
   // --------------------------------------------------------------------------
 
@@ -248,6 +263,10 @@ app.whenReady().then(() => {
    */
   tray.createTray({
     onOpenConfig: () => windows.openConfigPanelWindow(),
+    onRestart: () => {
+      app.relaunch();
+      app.exit(0);
+    },
     onQuit: () => app.quit()
   });
 
@@ -304,6 +323,8 @@ app.whenReady().then(() => {
   windows.createFloatingButtonWindow();
   windows.createPickResultWindowInstance();
   windows.startFloatingWindowWatchdog();
+
+
 
   /*
    * macOS 专属：Dock 图标点击时重建悬浮窗。

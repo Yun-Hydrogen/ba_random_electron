@@ -102,7 +102,6 @@
       bgmStartTime, bgmFadeDuration
     }
     admin: {                                — 高级设置（管理员权限等）
-      adminTopmostEnabled, adminAutoStartPath,
       adminAutoStartTaskName, adminAutoStartAdmin,
       uiAccessEnabled
     }
@@ -154,46 +153,40 @@ import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 //    floating → TabFloating.vue （悬浮按钮）
 //    result   → TabResult.vue   （结果显示）
 //    advanced → TabAdvanced.vue （高级设置）
-//    logs     → TabLogs.vue     （日志输出）
+//    about   → ConfigPanel.vue 内联（关于应用）
 // ============================================================
 export const tabs = [
   {
     id: 'roster',
     label: '名单管理',
     color: '#66ccff',
-    /*
-     * SVG 图标：列表（三条横线 + 三个圆点）
-     * viewBox 0 0 24 24 表示坐标系从 (0,0) 到 (24,24)
-     */
+    /* SVG 图标：列表（三条横线 + 三个圆点） */
     icon: '<svg viewBox="0 0 24 24" class="tab-svg"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.5"/><circle cx="4" cy="12" r="1.5"/><circle cx="4" cy="18" r="1.5"/></svg>'
   },
   {
     id: 'floating',
     label: '悬浮按钮',
     color: '#39c5bb',
-    /* SVG 图标：同心圆（靶心/悬浮感） */
     icon: '<svg viewBox="0 0 24 24" class="tab-svg"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.5"/></svg>'
   },
   {
     id: 'result',
-    label: '结果显示',
+    label: '结果浮窗',
     color: '#55cc99',
-    /* SVG 图标：五角星（抽奖结果/星星） */
     icon: '<svg viewBox="0 0 24 24" class="tab-svg"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9"/></svg>'
   },
   {
     id: 'advanced',
     label: '高级设置',
     color: '#aa88dd',
-    /* SVG 图标：齿轮（设置/高级感） */
     icon: '<svg viewBox="0 0 24 24" class="tab-svg"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
   },
   {
-    id: 'logs',
-    label: '日志输出',
-    color: '#99aabb',
-    /* SVG 图标：文档（日志/文件） */
-    icon: '<svg viewBox="0 0 24 24" class="tab-svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'
+    id: 'about',
+    label: '关于应用',
+    color: '#ff9966',
+    /* SVG 图标：信息圆圈（i） */
+    icon: '<svg viewBox="0 0 24 24" class="tab-svg"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
   }
 ]
 
@@ -226,7 +219,7 @@ export function useConfigPanel() {
   //  滑块（slider）是标签栏下方的高亮指示条，切换标签时平滑滑动。
   //
   //  核心变量：
-  //    activeTab     — 当前选中的标签 ID（初始 'roster'）
+  //    activeTab     — 当前选中的标签 ID（初始 'about'）
   //    tabBarRef     — 标签栏 DOM 元素引用（模板 ref）
   //    sliderLeft    — 滑块的水平偏移（px）
   //    sliderWidth   — 滑块的宽度（px，固定 80px）
@@ -238,7 +231,7 @@ export function useConfigPanel() {
   //    3. 计算偏移 = 激活标签中心 - 标签栏左边界 - 滑块半宽
   //    4. 如果标签宽度 > 滑块宽度，滑块居中于标签内
   // ============================================================
-  const activeTab = ref('roster')
+  const activeTab = ref('about')
   const tabBarRef = ref(null)
   const sliderLeft = ref(0)
   const sliderWidth = ref(0)
@@ -310,6 +303,7 @@ export function useConfigPanel() {
     floatingButton: {
       sizePercent: 100,
       alwaysOnTop: true,
+      showInTaskbar: false,
       position: { x: null, y: null },
       iconDataUrl: '',
       iconSize: 48,
@@ -321,6 +315,7 @@ export function useConfigPanel() {
       panelOpacity: 0.9,
       panelBgColor: '#ffffff',
       panelBorderColor: '#66ccff',
+      showDeco: true,
       playMusic: false,
       soundVolume: 80,
       musicVolume: 60,
@@ -328,11 +323,13 @@ export function useConfigPanel() {
       bgmFadeDuration: 1.5
     },
     admin: {
-      adminTopmostEnabled: false,
       adminAutoStartPath: '',
       adminAutoStartTaskName: 'Blue Random (Admin)',
       adminAutoStartAdmin: true,
-      uiAccessEnabled: false
+      uiAccessEnabled: false,
+      renderingBackend: 'd3d9',
+      disableDirectComposition: true,
+      disableHardwareAcceleration: false
     }
   })
 
@@ -597,20 +594,12 @@ export function useConfigPanel() {
   }
 
   /*
-   * handleApply() —— 应用按钮：保存配置后关闭
-   *
-   * 流程：
-   *   1. JSON.parse(JSON.stringify(draft)) 深拷贝 draft
-   *      —— 必须深拷贝，因为 draft 是 Vue reactive 代理对象，
-   *         直接传给 IPC 会导致序列化问题
-   *   2. 调用主进程 saveConfig 写入 config.yml
-   *   3. 保存成功后关闭窗口
+   * handleApply() —— 应用按钮：保存配置（不关闭窗口）
    */
   async function handleApply() {
     const payload = JSON.parse(JSON.stringify(draft))
     if (window.configPanelApi) {
       await window.configPanelApi.saveConfig(payload)
-      closeWithAnimation(true)
     }
   }
 

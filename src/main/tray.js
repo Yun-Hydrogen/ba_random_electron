@@ -47,10 +47,11 @@ const path = require('path');
 const { buildTrayContextMenu } = require('./tray-menu');
 
 /*
- * createTray({ onOpenConfig, onQuit }) —— 创建系统托盘。
+ * createTray({ onOpenConfig, onRestart, onQuit }) —— 创建系统托盘。
  *
  * 参数：
  *   onOpenConfig — 点击"配置"菜单项的回调
+ *   onRestart   — 点击"重启"菜单项的回调
  *   onQuit       — 点击"退出"菜单项的回调
  *
  * 返回：Electron Tray 实例
@@ -64,7 +65,7 @@ const { buildTrayContextMenu } = require('./tray-menu');
  *
  * 调用位置：main.js 的 app.whenReady() 回调中，在所有权限检查通过后。
  */
-function createTray({ onOpenConfig, onQuit }) {
+function createTray({ onOpenConfig, onRestart, onQuit }) {
   /* 判断是否为开发模式（Vite 开发服务器在运行） */
   const isDev = !!process.env.VITE_DEV_SERVER_URL;
 
@@ -86,9 +87,10 @@ function createTray({ onOpenConfig, onQuit }) {
   /* 鼠标悬停提示 */
   tray.setToolTip('Blue Random');
 
-  /* 构建菜单（"配置" / "退出"）并绑定 */
+  /* 构建菜单（"配置" / "重启" / "退出"）并绑定 */
   const trayMenu = buildTrayContextMenu({
     onOpenConfig,
+    onRestart,
     onQuit
   });
   tray.setContextMenu(trayMenu);

@@ -1,4 +1,4 @@
-﻿<!--
+<!--
 ================================================================================
   组件：Floating.vue
   所属：悬浮按钮窗口（主进程 BrowserWindow 直接加载，不经 vue-router）
@@ -9,11 +9,21 @@
 ================================================================================
   本组件是悬浮按钮窗口的完整界面，包含三个视觉层次：
 
-    层次          | 组件            | 说明
-    ──────────────┼─────────────────┼──────────────────────────────────────────
-    1. 悬浮按钮   | FloatingButton  | 可拖拽圆形按钮，居中显示，点击触发 picker
-    2. 人数选择器 | picker-capsule  | 胶囊形控件条，悬浮按钮正上方，MIN/−/N/+/MAX
-    3. 确认/取消  | picker-actions  | 左右两侧圆形按钮（X 关闭 / ✓ 确认抽取）
+    层次          | 说明
+    ──────────────┼──────────────────────────────────────────
+    1. 悬浮按钮   | 可拖拽圆形按钮，居中显示，点击触发 picker
+    2. 人数选择器 | 胶囊形控件条，悬浮按钮正上方，MIN/−/N/+/MAX
+    3. 确认/取消  | 左右两侧圆形按钮（X 关闭 / ✓ 确认抽取）
+  4. 鼠标穿透   | setShape 区域裁剪（D3D9 透明窗口唯一穿透方案）
+  5. 淡入淡出   | 主进程 win.setOpacity() 窗口级动画
+
+  2026-07-20 架构变更：
+    - D3D9 作为全模式默认渲染后端。
+    - setShape（SetWindowRgn）回归，D3D9 下透明窗口不支持像素级穿透。
+    - 淡入淡出回归 win.setOpacity()（D3D9 下 JS/CSS 动画不被合成器逐帧执行）。
+    - 展开态允许拖拽悬浮按钮。
+    - 窗口最小尺寸从 340px 降至 200px。
+    - FloatingButton 子组件已内联到本文件。
 
 ================================================================================
   二、数据流架构
@@ -24,7 +34,7 @@
   |  - floatingButtonApi.getConfig() → 返回 floatingButton 配置   |
   |  - floatingPickerApi.getConfig() → 返回 pickCountDialog 配置  |
   |  - floatingPickerApi.confirm(count) → 触发随机抽取            |
-  |  - floatingButtonApi.setExpanded / setIgnoreMouseEvents       |
+  |  - floatingButtonApi.setExpanded / startDrag / moveDrag ...  |
   +--------------------------+----------------------------------+
                              | IPC (contextBridge via preload.js)
                              v
@@ -34,13 +44,12 @@
   |  状态（refs）：                                              |
   |    sizePx, transparencyPercent, iconDataUrl, iconSize        |
   |    borderColor, count, isPickerOpen, countPulse              |
+  |    pointerDown, isDragging, startGlobalX, rAF ...            |
   |                                                             |
   |  核心计算（computed）：                                       |
   |    pickerMetrics — 环形布局的几何参数（半径、尺寸等）          |
   |    pickerStyle   — CSS 自定义属性注入                         |
   |    canDecrease / canIncrease — 人数边界判断                   |
-  |                                                             |
-  |  子组件：FloatingButton（接收 props + @click 事件）            |
   +-------------------------------------------------------------+
 
 ================================================================================
@@ -49,18 +58,11 @@
 
   打开 picker（用户点击悬浮按钮）：
     1. isPickerOpen = true
-    2. watch 触发 → setIgnoreMouseEvents(false)  强制捕获鼠标
-    3. watch 触发 → setExpanded(true, windowSize) 窗口扩大到容纳环绕控件
+    2. watch 触发 → setExpanded(true, windowSize) 窗口扩大到容纳环绕控件
 
   关闭 picker（用户点击 X / ✓ 或确认抽取）：
     1. isPickerOpen = false
-    2. watch 触发 → setExpanded(false)            窗口收缩为按钮大小
-    3. 鼠标穿透由 FloatingButton 根据 hover 状态自行管理
-
-  为什么用 watch 而非直接在 setPickerOpen 中调用 IPC：
-    Vue 的 prop 传递是异步的（nextTick），如果在 setPickerOpen 中立即调用
-    setExpanded，FloatingButton 的 dragDisabled prop 可能尚未更新，
-    导致 updateIgnoreMouse() 做出错误的穿透决策。watch 确保 prop 传播完成后再执行。
+    2. watch 触发 → setExpanded(false) 窗口收缩为按钮大小
 
 ================================================================================
   四、pickerMetrics 几何计算
@@ -82,6 +84,7 @@
   入场动画：0.22s 飞入（scale 0.85→1 + translateY 12px→0）
   退场动画：0.18s 淡出
   人数脉冲：0.25s scale 弹跳
+  淡入淡出：主进程 win.setOpacity()，与渲染后端无关
 
 ================================================================================
   六、维护注意事项
@@ -90,26 +93,36 @@
     尺寸计算公式，修改任一处需同步另一处
   - CSS 自定义属性（--size-px 等）由 pickerStyle computed 注入，模板中通过 var() 引用
   - .picker-layer 不得设置 pointer-events: none，否则所有子元素无法点击
-  - FloatingButton 的 .floating-root 严禁 width/height: 100%
-  - watch(isPickerOpen) 是处理 prop 异步传播的关键，不要改为直接调用
+  - .floating-root 严禁 width/height: 100%
+  - watch(isPickerOpen) 是处理窗口展开/收缩和 setShape 切换的关键
+  - 展开态拖拽已放开（handlePointerDown/Move 无 isPickerOpen 门控）
 
-  最后更新：2026-06-28
+  最后更新：2026-07-20
 ================================================================================
 -->
 <template>
-  <div class="floating-stage" :class="{ 'is-picker-open': isPickerOpen }" :style="pickerStyle">
+  <div
+    class="floating-stage"
+    :class="{ 'is-picker-open': isPickerOpen }"
+    :style="pickerStyle"
+  >
 
-    <!-- ====== 第 1 层：悬浮按钮（FloatingButton 子组件） ====== -->
-    <FloatingButton
-      class="main-floating-btn"
-      :size-px="sizePx"
-      :transparency-percent="transparencyPercent"
-      :icon-data-url="iconDataUrl"
-      :icon-size="iconSize"
-      :border-color="borderColor"
-      :drag-disabled="isPickerOpen"
-      @click="handleFloatingButtonClick"
-    />
+    <!-- ====== 第 1 层：悬浮按钮 ====== -->
+    <div class="floating-root main-floating-btn">
+      <button
+        class="floating-button"
+        :class="{ 'is-dragging': isDragging }"
+        :style="buttonStyle"
+        @contextmenu.prevent
+        @pointerdown="handlePointerDown"
+        @pointermove="handlePointerMove"
+        @pointerup="handlePointerUp"
+        @pointercancel="handlePointerCancel"
+        title=""
+      >
+        <img :src="iconSrc" alt="随机抽取" draggable="false" :style="iconStyle" />
+      </button>
+    </div>
 
     <!-- ====== 第 2 层：人数选择器 + 确认/取消（Vue Transition 控制进出动画） ====== -->
     <transition name="picker-pop">
@@ -145,8 +158,10 @@
             <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M20 6L9 17l-5-5"/></svg>
           </button>
         </div>
+
       </div>
     </transition>
+
   </div>
 </template>
 
@@ -155,55 +170,173 @@
 //  导入依赖
 // ============================================================
 import { ref, computed, watch, onMounted } from 'vue'
-import FloatingButton from '../components/FloatingButton.vue'
 
 // ============================================================
-//  1. 按钮外观状态（从 floatingButtonApi.getConfig() 加载）
+//  1. 点击音效（Web Audio API）
 // ============================================================
+const CLICK_SOUND_GAIN = 1
+const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+const clickBufferPromise = fetch('/sound/button_click.wav')
+  .then(r => r.arrayBuffer())
+  .then(buf => audioContext.decodeAudioData(buf.slice(0)))
 
-/* 按钮核心像素尺寸：50 × (sizePercent/100)，默认 50px */
-const sizePx = ref(50)
+function playClickSound() {
+  clickBufferPromise.then(async (buffer) => {
+    if (audioContext.state === 'suspended') await audioContext.resume()
+    const src = audioContext.createBufferSource()
+    src.buffer = buffer
+    const gain = audioContext.createGain()
+    gain.gain.value = CLICK_SOUND_GAIN
+    src.connect(gain).connect(audioContext.destination)
+    src.start(0)
+  }).catch(() => {})
+}
 
-/* 透明度百分比：0=不透明，100=全透明，默认 20 */
+// ============================================================
+//  2. 按钮外观状态（从 floatingButtonApi.getConfig() 加载）
+// ============================================================
+const sizePx              = ref(50)
 const transparencyPercent = ref(20)
+const iconDataUrl         = ref('')
+const iconSize            = ref(48)
+const borderColor         = ref('#66ccff')
 
-/* 自定义图标（base64 data URL），空字符串 = 使用内置默认图标 */
-const iconDataUrl = ref('')
+const styleOpacity = computed(() =>
+  Math.max(0, Math.min(1, 1 - transparencyPercent.value / 100)))
 
-/* 图标在按钮内的显示尺寸（px），默认 48，实际被限制为按钮的 80% */
-const iconSize = ref(48)
+const buttonStyle = computed(() => ({
+  width: `${sizePx.value}px`,
+  height: `${sizePx.value}px`,
+  opacity: String(styleOpacity.value),
+  borderColor: borderColor.value || '#66ccff'
+}))
 
-/* 按钮圆形边框颜色（hex），默认 #66ccff */
-const borderColor = ref('#66ccff')
+const iconSrc = computed(() =>
+  (iconDataUrl.value || '').trim() || './image/app.ico')
+
+const iconStyle = computed(() => {
+  const maxPx = Math.max(16, Math.min(iconSize.value, Math.round(sizePx.value * 0.8)))
+  return { width: `${maxPx}px`, height: `${maxPx}px` }
+})
 
 // ============================================================
-//  2. 人数选择器状态
+//  3. 拖拽状态
 // ============================================================
+const DRAG_THRESHOLD_PX = 3
 
-/* 当前选择的人数（1-10） */
+const pointerDown     = ref(false)
+const activePointerId = ref(null)
+const isDragging      = ref(false)
+const startGlobalX    = ref(0)
+const startGlobalY    = ref(0)
+const pendingDx       = ref(0)
+const pendingDy       = ref(0)
+const rafId           = ref(0)
+
+function getGlobalPoint(event) {
+  const sx = Number(event.screenX)
+  const sy = Number(event.screenY)
+  if (Number.isFinite(sx) && Number.isFinite(sy)) return { x: sx, y: sy }
+  return { x: window.screenX + event.clientX, y: window.screenY + event.clientY }
+}
+
+function flushMove() {
+  if (!isDragging.value || !window.floatingButtonApi) { rafId.value = 0; return }
+  window.floatingButtonApi.moveDrag(pendingDx.value, pendingDy.value)
+  rafId.value = 0
+}
+function scheduleMove() {
+  if (rafId.value !== 0) return
+  rafId.value = window.requestAnimationFrame(flushMove)
+}
+function cancelScheduledMove() {
+  if (rafId.value !== 0) { window.cancelAnimationFrame(rafId.value); rafId.value = 0 }
+}
+
+// ============================================================
+//  4. 拖拽事件处理器
+// ============================================================
+function handlePointerDown(event) {
+  if (event.pointerType === 'mouse' && event.button !== 0) return
+
+  pointerDown.value = true
+  activePointerId.value = event.pointerId
+  isDragging.value = false
+
+  /* 展开态也允许拖拽，方便调整位置后继续操作 picker */
+  const pt = getGlobalPoint(event)
+  startGlobalX.value = pt.x
+  startGlobalY.value = pt.y
+  pendingDx.value = 0
+  pendingDy.value = 0
+  cancelScheduledMove()
+  if (event.currentTarget?.setPointerCapture) {
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+}
+
+function handlePointerMove(event) {
+  if (activePointerId.value !== event.pointerId) return
+  if (!pointerDown.value || !window.floatingButtonApi) return
+
+  const pt = getGlobalPoint(event)
+  const dx = pt.x - startGlobalX.value
+  const dy = pt.y - startGlobalY.value
+
+  if (!isDragging.value && (Math.abs(dx) >= DRAG_THRESHOLD_PX || Math.abs(dy) >= DRAG_THRESHOLD_PX)) {
+    isDragging.value = true
+    window.floatingButtonApi.startDrag()
+  }
+  if (isDragging.value) {
+    pendingDx.value = dx
+    pendingDy.value = dy
+    scheduleMove()
+  }
+}
+
+function handlePointerUp(event) {
+  if (activePointerId.value !== event.pointerId) return
+  if (!pointerDown.value) return
+
+  if (isDragging.value && window.floatingButtonApi) {
+    const pt = getGlobalPoint(event)
+    cancelScheduledMove()
+    window.floatingButtonApi.moveDrag(pt.x - startGlobalX.value, pt.y - startGlobalY.value)
+    window.floatingButtonApi.endDrag()
+  } else if (!isDragging.value) {
+    playClickSound()
+    handleFloatingButtonClick()
+  }
+
+  pointerDown.value = false
+  activePointerId.value = null
+  isDragging.value = false
+  if (event.currentTarget?.releasePointerCapture) {
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+}
+
+function handlePointerCancel(event) {
+  if (activePointerId.value !== null && activePointerId.value !== event.pointerId) return
+  if (isDragging.value && window.floatingButtonApi) {
+    cancelScheduledMove()
+    window.floatingButtonApi.endDrag()
+  }
+  pointerDown.value = false
+  activePointerId.value = null
+  isDragging.value = false
+}
+
+// ============================================================
+//  5. 人数选择器状态
+// ============================================================
 const count = ref(1)
-
-/* 人数选择器是否展开 */
 const isPickerOpen = ref(false)
-
-/* 人数变更时的脉冲动画触发器 */
 const countPulse = ref(false)
-
-/* 人数范围常量 */
 const MIN_COUNT = 1
 const MAX_COUNT = 10
-
-/* 脉冲动画定时器句柄（用于取消上一个动画） */
 let pulseTimer = null
 
-// ============================================================
-//  3. 工具函数
-// ============================================================
-
-/*
- * 整数范围裁剪。
- * 非数字或 Infinity 返回 fallback，否则 clamp 到 [min, max] 并取整。
- */
 function clampInt(value, min, max, fallback) {
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
@@ -211,21 +344,8 @@ function clampInt(value, min, max, fallback) {
 }
 
 // ============================================================
-//  4. 环形布局几何计算（pickerMetrics）
+//  6. 环形布局几何计算（pickerMetrics）
 // ============================================================
-
-/*
- * 计算环绕人数选择器的所有几何参数。
- *
- * 公式链（与 windows.js 的 getFloatingButtonWindowSize 保持一致）：
- *   base            = max(40, sizePx)
- *   actionBtnSize   = max(36, base × 0.7)    // X/✓ 按钮大小
- *   placementRadius = max(55, base × 1.05)    // 环形排列半径
- *   ringRadius      = placementRadius + ringThickness/2
- *   windowSize      = max(340, ringRadius × 2 + 40)
- *
- * 返回 11 个几何值，通过 pickerStyle 转为 CSS 自定义属性。
- */
 const pickerMetrics = computed(() => {
   const base = Math.max(40, sizePx.value)
   const actionBtnSize = Math.round(Math.max(36, base * 0.7))
@@ -234,7 +354,7 @@ const pickerMetrics = computed(() => {
   const countSize = actionBtnSize
   const placementRadius = Math.round(Math.max(55, base * 1.05))
   const ringRadius = placementRadius + Math.round(ringThickness / 2)
-  const windowSize = Math.round(Math.max(340, ringRadius * 2 + 40))
+  const windowSize = Math.round(Math.max(200, ringRadius * 2 + 40))
   const arcSpan = 145
   const arcCenter = windowSize / 2
   const circum = 2 * Math.PI * placementRadius
@@ -257,14 +377,8 @@ const pickerMetrics = computed(() => {
 })
 
 // ============================================================
-//  5. CSS 自定义属性注入（pickerStyle）
+//  7. CSS 自定义属性注入（pickerStyle）
 // ============================================================
-
-/*
- * 将 pickerMetrics 的数值转为 CSS 自定义属性（--xxx）。
- * 模板中的 CSS 通过 var(--size-px) 等引用这些值，
- * 实现 JS 计算尺寸 + CSS 渲染布局的分离。
- */
 const pickerStyle = computed(() => ({
   '--size-px': `${sizePx.value}px`,
   '--ring-radius': `${pickerMetrics.value.ringRadius}px`,
@@ -277,24 +391,12 @@ const pickerStyle = computed(() => ({
   '--arc-span': `${pickerMetrics.value.arcSpan}deg`
 }))
 
-// ============================================================
-//  6. 人数边界判断
-// ============================================================
-
-/* 是否可以继续减少（count > 1） */
 const canDecrease = computed(() => count.value > MIN_COUNT)
-
-/* 是否可以继续增加（count < 10） */
 const canIncrease = computed(() => count.value < MAX_COUNT)
 
 // ============================================================
-//  7. 人数脉冲动画
+//  8. 人数脉冲动画
 // ============================================================
-
-/*
- * 触发人数格子的缩放弹跳动画（0.25s）。
- * 使用 requestAnimationFrame 重置动画状态，确保连续点击时动画重新播放。
- */
 function triggerPulse() {
   countPulse.value = false
   if (pulseTimer) clearTimeout(pulseTimer)
@@ -303,26 +405,16 @@ function triggerPulse() {
 }
 
 // ============================================================
-//  8. 初始化配置（从主进程加载）
+//  9. 初始化配置（从主进程加载）
 // ============================================================
-
-/*
- * 组件挂载时调用，从主进程通过 IPC 获取配置。
- *
- * floatingButtonApi.getConfig() 返回 floatingButton 对象：
- *   sizePercent, transparencyPercent, iconDataUrl, iconSize, borderColor
- *
- * floatingPickerApi.getConfig() 返回 pickCountDialog 对象：
- *   defaultCount（1-10）
- */
 async function initConfig() {
   if (window.floatingButtonApi) {
     const cfg = await window.floatingButtonApi.getConfig()
-    sizePx.value = Math.round(50 * (cfg.sizePercent / 100))
+    sizePx.value              = Math.round(50 * (cfg.sizePercent / 100))
     transparencyPercent.value = cfg.transparencyPercent
-    iconDataUrl.value = cfg.iconDataUrl || ''
-    iconSize.value = cfg.iconSize || 48
-    borderColor.value = cfg.borderColor || '#66ccff'
+    iconDataUrl.value         = cfg.iconDataUrl || ''
+    iconSize.value            = cfg.iconSize || 48
+    borderColor.value         = cfg.borderColor || '#66ccff'
   }
 
   if (window.floatingPickerApi) {
@@ -332,74 +424,104 @@ async function initConfig() {
 }
 
 // ============================================================
-//  9. picker 开关逻辑
+//  10. picker 开关逻辑
 // ============================================================
+function handleFloatingButtonClick() { isPickerOpen.value = !isPickerOpen.value }
+function handleClosePicker()         { isPickerOpen.value = false }
 
-/* 纯状态设置（不执行副作用，副作用由 watch 处理） */
-function setPickerOpen(open) { isPickerOpen.value = open }
-
-/* 点击悬浮按钮 → 切换 picker 开关 */
-function handleFloatingButtonClick() { setPickerOpen(!isPickerOpen.value) }
-
-/* 点击 X 关闭按钮 → 关闭 picker */
-function handleClosePicker() { setPickerOpen(false) }
-
-/*
- * 点击 ✓ 确认按钮 → 校验人数 → 关闭 picker → 通过 IPC 触发抽取。
- * 抽取的实际执行在 windows.js 的 pickStudentsByWeight() 中。
- */
 function handleConfirm() {
   const selectedCount = clampInt(count.value, MIN_COUNT, MAX_COUNT, MIN_COUNT)
-  setPickerOpen(false)
-  if (window.floatingPickerApi) {
-    window.floatingPickerApi.confirm(selectedCount)
-  }
+  isPickerOpen.value = false
+  /*
+   * 延迟触发抽取，让 shape 先收缩为按钮大小（~220ms），
+   * 再由主进程 fadeOut。避免大窗口下淡出被截断。
+   */
+  setTimeout(() => {
+    if (window.floatingPickerApi) {
+      window.floatingPickerApi.confirm(selectedCount)
+    }
+  }, 250)
 }
 
 // ============================================================
-//  10. 人数增减操作
+//  11. 人数增减操作
 // ============================================================
-
 function increaseCount() { if (canIncrease.value) { count.value += 1; triggerPulse() } }
 function decreaseCount() { if (canDecrease.value) { count.value -= 1; triggerPulse() } }
 function setMinCount()   { if (count.value !== MIN_COUNT) { count.value = MIN_COUNT; triggerPulse() } }
 function setMaxCount()   { if (count.value !== MAX_COUNT) { count.value = MAX_COUNT; triggerPulse() } }
 
 // ============================================================
-//  11. picker 展开/收缩的窗口副作用
+//  12. 鼠标穿透（setShape 区域裁剪）
+//
+//  D3D9 下透明窗口不支持像素级命中测试。
+//  使用 setShape（SetWindowRgn）在 OS 层面精确裁剪窗口命中区域：
+//    收缩态：仅悬浮按钮矩形区域捕获鼠标
+//    展开态：大矩形覆盖按钮 + 胶囊 + X/✓ 整个控件区域
+//  矩形外区域自动穿透鼠标事件，零性能开销。
 // ============================================================
 
-/*
- * 监听 isPickerOpen 变化，执行窗口级别的副作用。
- *
- * 为什么用 watch 而非在 setPickerOpen 中直接调用：
- *   Vue 的 prop 传递是异步的。如果在 setPickerOpen 中立即调用
- *   setExpanded，FloatingButton 的 dragDisabled prop 可能尚未更新，
- *   导致 updateIgnoreMouse() 使用过期的 prop 值做出错误决策。
- *   watch 在 Vue 完成响应式传播后才触发，确保时序正确。
- */
+const shapeExpanded = ref(false)
+let shapeCloseTimer = null
+
+function applyShape(expanded) {
+  if (!window.floatingButtonApi || typeof window.floatingButtonApi.setShape !== 'function') return
+  const w = pickerMetrics.value.windowSize
+
+  if (expanded) {
+    /* 展开态：一个大矩形覆盖整个控件区域（按钮 + 上方胶囊 + 两侧按钮） */
+    const bs = sizePx.value + 20
+    const bh = bs / 2
+    const rad = pickerMetrics.value.placementRadius
+    const actHalf = pickerMetrics.value.actionBtnSize * 0.65
+    const ringH = pickerMetrics.value.ringThickness
+    const capTop = w / 2 - (sizePx.value / 2) - ringH - 10
+    const btnBottom = w / 2 + bh
+    const pad = 6
+    const rx = Math.round(w / 2 - rad - actHalf - pad)
+    const ry = Math.round(capTop - pad)
+    const rw = Math.round(rad * 2 + actHalf * 2 + pad * 2)
+    const rh = Math.round(btnBottom - capTop + pad * 2)
+    window.floatingButtonApi.setShape([{ x: rx, y: ry, width: rw, height: rh }])
+  } else {
+    /* 收缩态：仅按钮矩形（含少量 padding 便于点击） */
+    const bs = sizePx.value + 20
+    const bx = Math.round((w - bs) / 2)
+    const by = Math.round((w - bs) / 2)
+    window.floatingButtonApi.setShape([{ x: bx, y: by, width: bs, height: bs }])
+  }
+  shapeExpanded.value = expanded
+}
+
 watch(isPickerOpen, (open) => {
   if (!window.floatingButtonApi) return
+  if (shapeCloseTimer) { clearTimeout(shapeCloseTimer); shapeCloseTimer = null }
 
   if (open) {
-    /* 打开 picker：重置人数、强制捕获鼠标、扩大窗口 */
     count.value = MIN_COUNT
-    window.floatingButtonApi.setIgnoreMouseEvents(false)
-    if (typeof window.floatingButtonApi.setExpanded === 'function') {
-      const size = pickerMetrics.value.windowSize
-      window.floatingButtonApi.setExpanded(true, { width: size, height: size })
-    }
+    applyShape(true)
   } else {
-    /* 关闭 picker：收缩窗口，穿透状态由 FloatingButton 管理 */
-    if (typeof window.floatingButtonApi.setExpanded === 'function') {
-      window.floatingButtonApi.setExpanded(false)
-    }
+    /* 延迟收缩 shape，等 CSS leave 动画播完（~220ms）再切小矩形 */
+    shapeCloseTimer = setTimeout(() => {
+      applyShape(false)
+      shapeCloseTimer = null
+    }, 220)
+  }
+
+  if (typeof window.floatingButtonApi.setExpanded === 'function') {
+    window.floatingButtonApi.setExpanded(open)
   }
 })
 
+watch([sizePx, pickerMetrics], () => {
+  if (shapeExpanded.value) applyShape(true)
+  else applyShape(false)
+})
+
 // ============================================================
-//  12. 生命周期
+//  13. 生命周期
 // ============================================================
+
 onMounted(() => { initConfig() })
 </script>
 
@@ -426,6 +548,12 @@ onMounted(() => { initConfig() })
   place-items: center;
   font-family: 'Bahnschrift', 'Segoe UI Variable', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
   overflow: hidden;
+
+  /*
+   * 淡入淡出由主进程 win.setOpacity() 驱动（SetLayeredWindowAttributes），
+   * 渲染进程不参与动画。
+   */
+  opacity: 1;
 }
 
 /* 悬浮按钮在舞台中的层级（高于 picker-layer 的 z-index: 5） */
@@ -435,7 +563,51 @@ onMounted(() => { initConfig() })
 }
 
 /* =================================================================
-   2. picker 层（含胶囊条 + X/✓ 按钮）
+   2. 悬浮按钮本体
+   ================================================================= */
+
+.floating-root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.floating-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  padding: 10px;
+  border: 2px solid #66ccff;
+  border-radius: 50%;
+  outline: none;
+  cursor: pointer;
+  background: #fff;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 260ms ease, box-shadow 260ms ease, background 260ms ease, border-color 260ms ease;
+}
+
+.floating-button:hover:not(.is-dragging) {
+  background: #fff;
+  border-color: rgba(40, 130, 230, 0.9);
+}
+
+.floating-button.is-dragging {
+  transition: none;
+}
+
+.floating-button img {
+  width: 120%;
+  height: 120%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* =================================================================
+   3. picker 层（含胶囊条 + X/✓ 按钮）
    ================================================================= */
 
 /*
@@ -451,13 +623,8 @@ onMounted(() => { initConfig() })
   z-index: 5;
 }
 
-/* 隐藏的 SVG 定义容器（未使用） */
-.picker-svg {
-  display: none;
-}
-
 /* =================================================================
-   3. 胶囊形控件条（悬浮按钮正上方）
+   4. 胶囊形控件条（悬浮按钮正上方）
    ================================================================= */
 
 /*
@@ -531,7 +698,7 @@ onMounted(() => { initConfig() })
   line-height: 1;
 }
 
-/* 竖线分隔符（MIN | - | 人数 | + | MAX 中的 |） */
+/* 竖线分隔符（MIN | − | 人数 | + | MAX 中的 |） */
 .capsule-divider {
   display: inline-block;
   width: 1px;
@@ -570,7 +737,7 @@ onMounted(() => { initConfig() })
 }
 
 /* =================================================================
-   4. X / ✓ 操作按钮容器
+   5. X / ✓ 操作按钮容器
    ================================================================= */
 
 /*
@@ -646,7 +813,7 @@ onMounted(() => { initConfig() })
 }
 
 /* =================================================================
-   5. picker 进出场动画（Vue Transition）
+   6. picker 进出场动画（Vue Transition）
    ================================================================= */
 
 /* 入场：0.22s 飞入（缩小 + 下移 → 正常） */
@@ -666,7 +833,7 @@ onMounted(() => { initConfig() })
 }
 
 /* =================================================================
-   6. 人数脉冲动画 keyframes
+   7. 人数脉冲动画 keyframes
    ================================================================= */
 @keyframes txt-pulse {
   0%   { transform: scale(1); }

@@ -90,7 +90,7 @@
   - .result-panel 使用 @click.stop 阻止冒泡（点击面板内部不触发关闭）
   - BGM 淡入淡出逻辑见 playBgm/stopBgm/cancelFade 三函数的详细注释
 
-  最后更新：2026-06-28
+  最后更新：2026-07-19
 ================================================================================
 -->
 <template>
@@ -101,17 +101,28 @@
     @click="handleStageClick"
     @keydown="handleKeydown"
   >
-    <!-- ====== 结果面板（中央圆角卡片） ====== -->
-    <div
-      class="result-panel"
-      :class="{
-        'is-fly-in': stagePhase === 'opening' || stagePhase === 'reveal' || stagePhase === 'ready',
-        'is-closing': isClosing
-      }"
-      :style="panelStyle"
-      @click.stop
-    >
-      <!-- ====== 信件行容器 ====== -->
+    <!-- ====== 中央区域：装饰图 + 结果面板 ====== -->
+    <div class="result-center">
+      <!-- 顶部装饰：阿罗娜 & 普拉娜，图片底端紧贴面板上边 -->
+      <img
+        v-if="showDeco"
+        class="result-deco-top"
+        src="/image/Arona_Plana.png"
+        alt=""
+        draggable="false"
+      />
+
+      <!-- ====== 结果面板（中央圆角卡片） ====== -->
+      <div
+        class="result-panel"
+        :class="{
+          'is-fly-in': stagePhase === 'opening' || stagePhase === 'reveal' || stagePhase === 'ready',
+          'is-closing': isClosing
+        }"
+        :style="panelStyle"
+        @click.stop
+      >
+        <!-- ====== 信件行容器 ====== -->
       <div class="result-rows" :class="{ 'is-two-rows': isTwoRows }" :key="animationKey">
         <!-- 第 1 行：最多 5 张 -->
         <div class="result-row">
@@ -147,7 +158,9 @@
       <p v-if="results.length" class="result-hint">{{ instructionText }}</p>
       <p v-else class="result-empty">暂无抽取结果</p>
     </div>
+    <!-- / result-center -->
   </div>
+</div>
 </template>
 
 <script setup>
@@ -232,6 +245,7 @@ const bgmFadeDuration = ref(1.5)       // 淡入淡出秒数
 const panelOpacity = ref(0.9)
 const panelBgColor = ref('#ffffff')
 const panelBorderColor = ref('#66ccff')
+const showDeco = ref(true)
 
 /* 面板动态样式：hex 颜色 + rgba alpha 通道拼接 */
 const panelStyle = computed(() => ({
@@ -562,6 +576,7 @@ async function loadSoundConfig() {
   panelOpacity.value = Number(cfg?.panelOpacity) || 0.9
   panelBgColor.value = cfg?.panelBgColor || '#ffffff'
   panelBorderColor.value = cfg?.panelBorderColor || '#66ccff'
+  showDeco.value = cfg?.showDeco !== false
 }
 
 // ============================================================
@@ -625,11 +640,44 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   outline: none;
+  /*
+   * UIAccess 模式下 DWM 合成可能使透明区域无法接收点击。
+   * rgba(0,0,0,0.01) 使整个全屏区域创建合成层以确保命中测试。
+   */
+  background: rgba(0, 0, 0, 0.01);
 }
 
 .result-stage.is-closing {
   pointer-events: none;
   animation: result-fade-out 220ms ease forwards;
+}
+
+/* =================================================================
+   1.5. 中央区域（装饰图 + 结果面板 纵向容器）
+   ================================================================= */
+
+/*
+ *  纵向排列装饰图 + 面板，整体在 .result-stage 中居中。
+ *  max-width 限制面板 + 图的整体宽度。
+ */
+.result-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/*
+ * 顶部装饰图：阿罗娜 & 普拉娜趴在线上（原图 1205×506）。
+ * 固定宽度 320px，等比缩放。
+ * margin-bottom: -4px 使图片底端紧贴面板外上边框，零缝隙。
+ */
+.result-deco-top {
+  display: block;
+  width: 300px;
+  height: auto;
+  margin-bottom: -4px;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* =================================================================
@@ -654,7 +702,7 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(8px);
   border: 4px solid #66ccff;
   box-shadow: 0 8px 32px rgba(6, 22, 48, 0.15);
-  min-width: 280px;
+  min-width: 320px;
   max-width: 95vw;
   opacity: 0;
   transform: scale(0.85) translateY(16px);

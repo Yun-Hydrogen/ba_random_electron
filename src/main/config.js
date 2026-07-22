@@ -76,6 +76,7 @@ const DEFAULT_CONFIG = {
     sizePercent: 100,        // 按钮大小百分比（基准 50px），范围 50-200
     transparencyPercent: 20, // 透明度百分比（0=不透明，100=全透明），范围 0-100
     alwaysOnTop: true,       // 是否始终置顶于其他窗口之上
+    showInTaskbar: false,    // 悬浮窗和结果浮窗是否在任务栏可见
     position: {              // 屏幕坐标，退出时自动保存
       x: null,               // null = 使用系统默认位置
       y: null
@@ -107,16 +108,37 @@ const DEFAULT_CONFIG = {
     bgmFadeDuration: 1.5,         // 淡入淡出秒数，范围 0.5-5
     panelOpacity: 0.9,            // 面板不透明度，范围 0.1-1.0
     panelBgColor: '#ffffff',      // 面板背景颜色（hex）
-    panelBorderColor: '#66ccff'   // 面板边框颜色（hex）
+    panelBorderColor: '#66ccff',  // 面板边框颜色（hex）
+    showDeco: true                // 结果浮窗顶部是否显示阿罗娜 & 普拉娜装饰图
   },
 
   /* ---- 高级设置（Windows 权限与计划任务） ---- */
   admin: {
-    adminTopmostEnabled: false,           // 开启管理员置顶增强
     adminAutoStartAdmin: true,            // 计划任务以管理员身份运行
     adminAutoStartPath: '',               // 计划任务的目标 exe 路径（空=自动检测）
     adminAutoStartTaskName: admin.ADMIN_TASK_DEFAULT_NAME,  // 计划任务名称
-    uiAccessEnabled: false               // 启用 UIAccess 置顶
+    uiAccessEnabled: false,              // 启用 UIAccess 置顶
+    /*
+     * Chromium 渲染后端（全模式通用，需重启）。
+     *
+     * d3d9   — ANGLE/D3D9（默认，所有模式推荐）
+     * vulkan — ANGLE/Vulkan
+     * gl     — ANGLE/OpenGL
+     */
+    renderingBackend: 'd3d9',
+    /*
+     * 禁用 DirectComposition（GDI 呈现）。
+     * 与 renderingBackend 组合使用：不同 ANGLE 后端 +
+     * 启用/禁用 DirectComposition 的组合可能产生不同性能表现。
+     * 默认 true，需重启生效。
+     */
+    disableDirectComposition: true,
+    /*
+     * 禁用 GPU 硬件加速（完全回退到 CPU 软件渲染）。
+     * 默认 false。启用后所有渲染由 CPU 完成，
+     * 包括 CSS 动画、WebGL、Canvas 2D 等。需重启。
+     */
+    disableHardwareAcceleration: false
   }
 };
 
@@ -193,11 +215,14 @@ function normalizeConfig(input) {
   const fbPos = fb.position && typeof fb.position === 'object' ? fb.position : {};
   const alwaysOnTop =
     typeof fb.alwaysOnTop === 'boolean' ? fb.alwaysOnTop : DEFAULT_CONFIG.floatingButton.alwaysOnTop;
+  const showInTaskbar =
+    typeof fb.showInTaskbar === 'boolean' ? fb.showInTaskbar : DEFAULT_CONFIG.floatingButton.showInTaskbar;
 
   const floatingButton = {
     sizePercent: clampNumber(fb.sizePercent, 50, 200, DEFAULT_CONFIG.floatingButton.sizePercent),
     transparencyPercent: clampNumber(fb.transparencyPercent, 0, 100, DEFAULT_CONFIG.floatingButton.transparencyPercent),
     alwaysOnTop,
+    showInTaskbar,
     position: {
       /* 坐标允许为 null（表示使用系统默认位置），数字则必须为有限整数 */
       x: Number.isFinite(Number(fbPos.x)) ? Math.round(Number(fbPos.x)) : null,
@@ -247,7 +272,11 @@ function normalizeConfig(input) {
     panelBorderColor:
       typeof pickResult.panelBorderColor === 'string' && pickResult.panelBorderColor
         ? pickResult.panelBorderColor
-        : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
+        : DEFAULT_CONFIG.pickResultDialog.panelBorderColor,
+    showDeco:
+      typeof pickResult.showDeco === 'boolean'
+        ? pickResult.showDeco
+        : DEFAULT_CONFIG.pickResultDialog.showDeco
   };
 
   // --------------------------------------------------------------------------
@@ -260,10 +289,6 @@ function normalizeConfig(input) {
     ? source.admin
     : (source.webConfig && typeof source.webConfig === 'object' ? source.webConfig : {});
   const adminConfig = {
-    adminTopmostEnabled:
-      typeof adminSource.adminTopmostEnabled === 'boolean'
-        ? adminSource.adminTopmostEnabled
-        : DEFAULT_CONFIG.admin.adminTopmostEnabled,
     adminAutoStartAdmin:
       typeof adminSource.adminAutoStartAdmin === 'boolean'
         ? adminSource.adminAutoStartAdmin
@@ -281,7 +306,20 @@ function normalizeConfig(input) {
     uiAccessEnabled:
       typeof adminSource.uiAccessEnabled === 'boolean'
         ? adminSource.uiAccessEnabled
-        : DEFAULT_CONFIG.admin.uiAccessEnabled
+        : DEFAULT_CONFIG.admin.uiAccessEnabled,
+    renderingBackend:
+      typeof adminSource.renderingBackend === 'string'
+      && ['d3d9', 'vulkan', 'gl'].includes(adminSource.renderingBackend)
+        ? adminSource.renderingBackend
+        : DEFAULT_CONFIG.admin.renderingBackend,
+    disableDirectComposition:
+      typeof adminSource.disableDirectComposition === 'boolean'
+        ? adminSource.disableDirectComposition
+        : DEFAULT_CONFIG.admin.disableDirectComposition,
+    disableHardwareAcceleration:
+      typeof adminSource.disableHardwareAcceleration === 'boolean'
+        ? adminSource.disableHardwareAcceleration
+        : DEFAULT_CONFIG.admin.disableHardwareAcceleration
   };
 
   /* 返回干净的配置对象（结构保证与 DEFAULT_CONFIG 完全一致） */
@@ -399,6 +437,8 @@ function toConfigYamlWithComments(config) {
     `  transparencyPercent: ${fb.transparencyPercent}`,
     '  # 是否始终置顶（true/false），默认 true',
     `  alwaysOnTop: ${fb.alwaysOnTop ? 'true' : 'false'}`,
+    '  # 悬浮窗和结果浮窗是否在任务栏可见（true/false），默认 false',
+    `  showInTaskbar: ${fb.showInTaskbar ? 'true' : 'false'}`,
     '  # 窗口位置（屏幕坐标），退出时自动保存；null 为系统默认',
     '  position:',
     `    x: ${posX}`,
@@ -436,11 +476,11 @@ function toConfigYamlWithComments(config) {
     `  panelBgColor: ${yamlSingleQuote(pickResult.panelBgColor || '#ffffff')}`,
     '  # 面板边框颜色（hex），默认 #66ccff',
     `  panelBorderColor: ${yamlSingleQuote(pickResult.panelBorderColor || '#66ccff')}`,
+    '  # 结果浮窗顶部是否显示阿罗娜 & 普拉娜装饰图（true/false），默认 true',
+    `  showDeco: ${pickResult.showDeco ? 'true' : 'false'}`,
     '',
     '# ---- 高级设置 ----',
     'admin:',
-    '  # 启用管理员置顶增强（Windows 下会尝试管理员权限）',
-    `  adminTopmostEnabled: ${adminCfg.adminTopmostEnabled ? 'true' : 'false'}`,
     '  # 开机计划任务是否以管理员身份运行',
     `  adminAutoStartAdmin: ${adminCfg.adminAutoStartAdmin ? 'true' : 'false'}`,
     '  # 计划任务的可执行文件路径（留空则自动检测）',
@@ -449,6 +489,12 @@ function toConfigYamlWithComments(config) {
     `  adminAutoStartTaskName: ${yamlSingleQuote(adminCfg.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
     '  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）',
     `  uiAccessEnabled: ${adminCfg.uiAccessEnabled ? 'true' : 'false'}`,
+    '  # Chromium 渲染后端: d3d9 | vulkan | gl（需重启）',
+    `  renderingBackend: ${yamlSingleQuote(adminCfg.renderingBackend || 'd3d9')}`,
+    '  # 禁用 DirectComposition（GDI 呈现，默认开启，需重启）',
+    `  disableDirectComposition: ${adminCfg.disableDirectComposition !== false ? 'true' : 'false'}`,
+    '  # 禁用 GPU 硬件加速（全部 CPU 软件渲染，默认关闭，需重启）',
+    `  disableHardwareAcceleration: ${adminCfg.disableHardwareAcceleration ? 'true' : 'false'}`,
     ''
   ].join('\n');
 }

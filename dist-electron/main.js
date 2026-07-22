@@ -2370,6 +2370,7 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			sizePercent: 100,
 			transparencyPercent: 20,
 			alwaysOnTop: true,
+			showInTaskbar: false,
 			position: {
 				x: null,
 				y: null
@@ -2388,14 +2389,17 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			bgmFadeDuration: 1.5,
 			panelOpacity: .9,
 			panelBgColor: "#ffffff",
-			panelBorderColor: "#66ccff"
+			panelBorderColor: "#66ccff",
+			showDeco: true
 		},
 		admin: {
-			adminTopmostEnabled: false,
 			adminAutoStartAdmin: true,
 			adminAutoStartPath: "",
 			adminAutoStartTaskName: admin.ADMIN_TASK_DEFAULT_NAME,
-			uiAccessEnabled: false
+			uiAccessEnabled: false,
+			renderingBackend: "d3d9",
+			disableDirectComposition: true,
+			disableHardwareAcceleration: false
 		}
 	};
 	function clampNumber(value, min, max, fallback) {
@@ -2421,10 +2425,12 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const fb = source.floatingButton && typeof source.floatingButton === "object" ? source.floatingButton : {};
 		const fbPos = fb.position && typeof fb.position === "object" ? fb.position : {};
 		const alwaysOnTop = typeof fb.alwaysOnTop === "boolean" ? fb.alwaysOnTop : DEFAULT_CONFIG.floatingButton.alwaysOnTop;
+		const showInTaskbar = typeof fb.showInTaskbar === "boolean" ? fb.showInTaskbar : DEFAULT_CONFIG.floatingButton.showInTaskbar;
 		const floatingButton = {
 			sizePercent: clampNumber(fb.sizePercent, 50, 200, DEFAULT_CONFIG.floatingButton.sizePercent),
 			transparencyPercent: clampNumber(fb.transparencyPercent, 0, 100, DEFAULT_CONFIG.floatingButton.transparencyPercent),
 			alwaysOnTop,
+			showInTaskbar,
 			position: {
 				x: Number.isFinite(Number(fbPos.x)) ? Math.round(Number(fbPos.x)) : null,
 				y: Number.isFinite(Number(fbPos.y)) ? Math.round(Number(fbPos.y)) : null
@@ -2445,7 +2451,8 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			bgmFadeDuration: clampNumber(pickResult.bgmFadeDuration, .5, 5, DEFAULT_CONFIG.pickResultDialog.bgmFadeDuration),
 			panelOpacity: clampNumber(pickResult.panelOpacity, .1, 1, DEFAULT_CONFIG.pickResultDialog.panelOpacity),
 			panelBgColor: typeof pickResult.panelBgColor === "string" && pickResult.panelBgColor ? pickResult.panelBgColor : DEFAULT_CONFIG.pickResultDialog.panelBgColor,
-			panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor
+			panelBorderColor: typeof pickResult.panelBorderColor === "string" && pickResult.panelBorderColor ? pickResult.panelBorderColor : DEFAULT_CONFIG.pickResultDialog.panelBorderColor,
+			showDeco: typeof pickResult.showDeco === "boolean" ? pickResult.showDeco : DEFAULT_CONFIG.pickResultDialog.showDeco
 		};
 		const adminSource = source.admin && typeof source.admin === "object" ? source.admin : source.webConfig && typeof source.webConfig === "object" ? source.webConfig : {};
 		return {
@@ -2456,11 +2463,17 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			pickCountDialog,
 			pickResultDialog,
 			admin: {
-				adminTopmostEnabled: typeof adminSource.adminTopmostEnabled === "boolean" ? adminSource.adminTopmostEnabled : DEFAULT_CONFIG.admin.adminTopmostEnabled,
 				adminAutoStartAdmin: typeof adminSource.adminAutoStartAdmin === "boolean" ? adminSource.adminAutoStartAdmin : DEFAULT_CONFIG.admin.adminAutoStartAdmin,
 				adminAutoStartPath: typeof adminSource.adminAutoStartPath === "string" ? adminSource.adminAutoStartPath : DEFAULT_CONFIG.admin.adminAutoStartPath,
 				adminAutoStartTaskName: typeof adminSource.adminAutoStartTaskName === "string" && adminSource.adminAutoStartTaskName.trim() ? adminSource.adminAutoStartTaskName.trim() : DEFAULT_CONFIG.admin.adminAutoStartTaskName,
-				uiAccessEnabled: typeof adminSource.uiAccessEnabled === "boolean" ? adminSource.uiAccessEnabled : DEFAULT_CONFIG.admin.uiAccessEnabled
+				uiAccessEnabled: typeof adminSource.uiAccessEnabled === "boolean" ? adminSource.uiAccessEnabled : DEFAULT_CONFIG.admin.uiAccessEnabled,
+				renderingBackend: typeof adminSource.renderingBackend === "string" && [
+					"d3d9",
+					"vulkan",
+					"gl"
+				].includes(adminSource.renderingBackend) ? adminSource.renderingBackend : DEFAULT_CONFIG.admin.renderingBackend,
+				disableDirectComposition: typeof adminSource.disableDirectComposition === "boolean" ? adminSource.disableDirectComposition : DEFAULT_CONFIG.admin.disableDirectComposition,
+				disableHardwareAcceleration: typeof adminSource.disableHardwareAcceleration === "boolean" ? adminSource.disableHardwareAcceleration : DEFAULT_CONFIG.admin.disableHardwareAcceleration
 			}
 		};
 	}
@@ -2511,6 +2524,8 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			`  transparencyPercent: ${fb.transparencyPercent}`,
 			"  # 是否始终置顶（true/false），默认 true",
 			`  alwaysOnTop: ${fb.alwaysOnTop ? "true" : "false"}`,
+			"  # 悬浮窗和结果浮窗是否在任务栏可见（true/false），默认 false",
+			`  showInTaskbar: ${fb.showInTaskbar ? "true" : "false"}`,
 			"  # 窗口位置（屏幕坐标），退出时自动保存；null 为系统默认",
 			"  position:",
 			`    x: ${posX}`,
@@ -2548,11 +2563,11 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			`  panelBgColor: ${yamlSingleQuote(pickResult.panelBgColor || "#ffffff")}`,
 			"  # 面板边框颜色（hex），默认 #66ccff",
 			`  panelBorderColor: ${yamlSingleQuote(pickResult.panelBorderColor || "#66ccff")}`,
+			"  # 结果浮窗顶部是否显示阿罗娜 & 普拉娜装饰图（true/false），默认 true",
+			`  showDeco: ${pickResult.showDeco ? "true" : "false"}`,
 			"",
 			"# ---- 高级设置 ----",
 			"admin:",
-			"  # 启用管理员置顶增强（Windows 下会尝试管理员权限）",
-			`  adminTopmostEnabled: ${adminCfg.adminTopmostEnabled ? "true" : "false"}`,
 			"  # 开机计划任务是否以管理员身份运行",
 			`  adminAutoStartAdmin: ${adminCfg.adminAutoStartAdmin ? "true" : "false"}`,
 			"  # 计划任务的可执行文件路径（留空则自动检测）",
@@ -2561,6 +2576,12 @@ var require_config = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			`  adminAutoStartTaskName: ${yamlSingleQuote(adminCfg.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
 			"  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）",
 			`  uiAccessEnabled: ${adminCfg.uiAccessEnabled ? "true" : "false"}`,
+			"  # Chromium 渲染后端: d3d9 | vulkan | gl（需重启）",
+			`  renderingBackend: ${yamlSingleQuote(adminCfg.renderingBackend || "d3d9")}`,
+			"  # 禁用 DirectComposition（GDI 呈现，默认开启，需重启）",
+			`  disableDirectComposition: ${adminCfg.disableDirectComposition !== false ? "true" : "false"}`,
+			"  # 禁用 GPU 硬件加速（全部 CPU 软件渲染，默认关闭，需重启）",
+			`  disableHardwareAcceleration: ${adminCfg.disableHardwareAcceleration ? "true" : "false"}`,
 			""
 		].join("\n");
 	}
@@ -2654,8 +2675,6 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var currentPickResults = [];
 	var pickResultToken = 0;
 	var activePickResultToken = 0;
-	var floatingExpanded = false;
-	var floatingExpandedSize = null;
 	var floatingWindowWatchdog = null;
 	var FLOATING_WINDOW_FADE_MS = 400;
 	var WEIGHT_BOOST_GAMMA = 1.5;
@@ -2686,70 +2705,14 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const base = Math.max(40, sizePx);
 		const ringThickness = Math.round(Math.max(36, base * .7));
 		const ringRadius = Math.round(Math.max(55, base * 1.05)) + Math.round(ringThickness / 2);
-		const windowSize = Math.round(Math.max(340, ringRadius * 2 + 40));
+		const windowSize = Math.round(Math.max(200, ringRadius * 2 + 40));
 		return {
 			width: windowSize,
 			height: windowSize
 		};
 	}
-	function clampBoundsToWorkArea(bounds, workArea) {
-		if (!workArea) return bounds;
-		const cfg = config.refreshConfig();
-		const sizePx = Math.round(50 * (cfg.floatingButton.sizePercent / 100));
-		const paddingX = (bounds.width - sizePx) / 2;
-		const paddingY = (bounds.height - sizePx) / 2;
-		const minX = workArea.x - paddingX;
-		const minY = workArea.y - paddingY;
-		const maxX = workArea.x + workArea.width - bounds.width + paddingX;
-		const maxY = workArea.y + workArea.height - bounds.height + paddingY;
-		return {
-			...bounds,
-			x: Math.max(minX, Math.min(bounds.x, maxX)),
-			y: Math.max(minY, Math.min(bounds.y, maxY))
-		};
-	}
-	function resizeFloatingButtonWindow({ width, height }) {
-		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
-		const current = floatingButtonWindow.getBounds();
-		const centerX = current.x + current.width / 2;
-		const centerY = current.y + current.height / 2;
-		const targetWidth = Math.max(72, Math.round(width));
-		const targetHeight = Math.max(72, Math.round(height));
-		const nextBounds = {
-			x: Math.round(centerX - targetWidth / 2),
-			y: Math.round(centerY - targetHeight / 2),
-			width: targetWidth,
-			height: targetHeight
-		};
-		const display = screen.getDisplayNearestPoint({
-			x: Math.round(centerX),
-			y: Math.round(centerY)
-		});
-		const clamped = clampBoundsToWorkArea(nextBounds, display && display.workArea ? display.workArea : null);
-		floatingButtonWindow.setBounds(clamped, true);
-	}
 	function setFloatingButtonExpanded(payload) {
-		const expanded = Boolean(payload && payload.expanded);
-		floatingExpanded = expanded;
-		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
-		if (expanded) {
-			const size = payload && payload.size ? payload.size : null;
-			const width = size ? Number(size.width) : NaN;
-			const height = size ? Number(size.height) : NaN;
-			if (Number.isFinite(width) && Number.isFinite(height)) {
-				floatingExpandedSize = {
-					width,
-					height
-				};
-				resizeFloatingButtonWindow({
-					width,
-					height
-				});
-				return;
-			}
-		}
-		floatingExpandedSize = null;
-		resizeFloatingButtonWindow(getFloatingButtonWindowSize());
+		Boolean(payload && payload.expanded);
 	}
 	function persistFloatingButtonPosition() {
 		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
@@ -2767,17 +2730,32 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		});
 		config.saveConfig(updated);
 	}
-	function animateWindowOpacity(win, fromOpacity, toOpacity, durationMs) {
+	function animateWindowOpacity(win, fromOpacity, toOpacity, durationMs, signal) {
 		return new Promise((resolve) => {
 			if (!win || win.isDestroyed()) {
 				resolve();
 				return;
 			}
+			if (signal && signal.aborted) {
+				resolve();
+				return;
+			}
+			const onAbort = () => {
+				clearInterval(timer);
+				resolve();
+			};
+			if (signal) signal.addEventListener("abort", onAbort, { once: true });
 			const start = Date.now();
 			const delta = toOpacity - fromOpacity;
 			win.setOpacity(fromOpacity);
 			const timer = setInterval(() => {
 				if (!win || win.isDestroyed()) {
+					clearInterval(timer);
+					if (signal) signal.removeEventListener("abort", onAbort);
+					resolve();
+					return;
+				}
+				if (signal && signal.aborted) {
 					clearInterval(timer);
 					resolve();
 					return;
@@ -2787,27 +2765,44 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 				win.setOpacity(fromOpacity + delta * t);
 				if (t >= 1) {
 					clearInterval(timer);
+					if (signal) signal.removeEventListener("abort", onAbort);
 					resolve();
 				}
 			}, 16);
 		});
 	}
+	var _floatingFadeCtrl = null;
+	function _cancelFloatingFade() {
+		if (_floatingFadeCtrl) {
+			_floatingFadeCtrl.abort();
+			_floatingFadeCtrl = null;
+		}
+	}
 	async function fadeOutFloatingButtonWindow() {
 		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
 		if (!floatingButtonWindow.isVisible()) return;
+		_cancelFloatingFade();
+		const ctrl = new AbortController();
+		_floatingFadeCtrl = ctrl;
 		const currentOpacity = floatingButtonWindow.getOpacity();
-		await animateWindowOpacity(floatingButtonWindow, Number.isFinite(currentOpacity) ? currentOpacity : 1, 0, FLOATING_WINDOW_FADE_MS);
+		await animateWindowOpacity(floatingButtonWindow, Number.isFinite(currentOpacity) ? currentOpacity : 1, 0, FLOATING_WINDOW_FADE_MS, ctrl.signal);
+		if (ctrl.signal.aborted) return;
 		if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) {
 			floatingButtonWindow.hide();
 			floatingButtonWindow.setOpacity(1);
 		}
+		if (_floatingFadeCtrl === ctrl) _floatingFadeCtrl = null;
 	}
 	async function fadeInFloatingButtonWindow() {
 		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
+		_cancelFloatingFade();
+		const ctrl = new AbortController();
+		_floatingFadeCtrl = ctrl;
 		floatingButtonWindow.setOpacity(0);
 		floatingButtonWindow.show();
-		floatingButtonWindow.focus();
-		await animateWindowOpacity(floatingButtonWindow, 0, 1, FLOATING_WINDOW_FADE_MS);
+		floatingButtonWindow.blur();
+		await animateWindowOpacity(floatingButtonWindow, 0, 1, FLOATING_WINDOW_FADE_MS, ctrl.signal);
+		if (_floatingFadeCtrl === ctrl) _floatingFadeCtrl = null;
 	}
 	function createFloatingButtonWindow() {
 		if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) return floatingButtonWindow;
@@ -2825,7 +2820,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			hasShadow: false,
 			transparent: true,
 			alwaysOnTop: cfg.floatingButton.alwaysOnTop,
-			skipTaskbar: !isDebugMode,
+			skipTaskbar: isDebugMode ? false : !cfg.floatingButton.showInTaskbar,
 			type: isDebugMode ? void 0 : "toolbar",
 			focusable: isDebugMode ? true : process.platform !== "win32",
 			webPreferences: {
@@ -2841,25 +2836,18 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		}
 		const win = new BrowserWindow$1(windowOptions);
 		floatingButtonWindow = win;
-		if (floatingExpanded && floatingExpandedSize) resizeFloatingButtonWindow(floatingExpandedSize);
 		if (cfg.floatingButton.alwaysOnTop) win.setAlwaysOnTop(true, "screen-saver");
-		if (cfg.admin && cfg.admin.adminTopmostEnabled && typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+		if (typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 		win.setMenuBarVisibility(false);
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(process.env.VITE_DEV_SERVER_URL);
-		else {
-			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
-			win.loadFile(path$2.join(__dirname, "../dist/index.html"));
-		}
+		else win.loadFile(path$2.join(__dirname, "../dist/index.html"));
 		win.webContents.on("context-menu", (event) => event.preventDefault());
 		win.on("hide", () => {
 			if (isQuitting || isFloatingHiddenForPickCount) return;
 			setTimeout(() => {
 				if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
 				if (isQuitting || isFloatingHiddenForPickCount) return;
-				if (!floatingButtonWindow.isVisible()) {
-					floatingButtonWindow.setOpacity(1);
-					floatingButtonWindow.show();
-				}
+				if (!floatingButtonWindow.isVisible()) floatingButtonWindow.show();
 			}, 0);
 		});
 		win.on("closed", () => {
@@ -2881,10 +2869,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 				createFloatingButtonWindow();
 				return;
 			}
-			if (!floatingButtonWindow.isVisible()) {
-				floatingButtonWindow.setOpacity(1);
-				floatingButtonWindow.show();
-			}
+			if (!floatingButtonWindow.isVisible()) floatingButtonWindow.show();
 		}, 450);
 	}
 	function stopFloatingWindowWatchdog() {
@@ -2898,14 +2883,19 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			currentPickResults = [];
 			activePickResultToken = 0;
 			isFloatingHiddenForPickCount = false;
-			fadeInFloatingButtonWindow();
+			setTimeout(() => fadeInFloatingButtonWindow(), 0);
 			return;
 		}
-		if (pickResultWindow.isVisible()) pickResultWindow.hide();
+		if (pickResultWindow.isVisible()) {
+			pickResultWindow.blur();
+			pickResultWindow.hide();
+		}
 		currentPickResults = [];
 		activePickResultToken = 0;
 		isFloatingHiddenForPickCount = false;
-		fadeInFloatingButtonWindow();
+		setTimeout(() => {
+			fadeInFloatingButtonWindow();
+		}, 0);
 	}
 	function createPickResultWindowInstance() {
 		if (pickResultWindow && !pickResultWindow.isDestroyed()) return;
@@ -2919,7 +2909,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			maximizable: false,
 			movable: false,
 			alwaysOnTop: true,
-			skipTaskbar: !isDebugMode,
+			skipTaskbar: isDebugMode ? false : !config.refreshConfig().floatingButton.showInTaskbar,
 			webPreferences: {
 				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
@@ -2930,9 +2920,9 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		pickResultWindow = win;
 		isPickResultWindowReady = false;
 		win.setMenuBarVisibility(false);
+		if (typeof win.setVisibleOnAllWorkspaces === "function") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pick-result`);
 		else win.loadURL(`file://${path$2.join(__dirname, "../dist/index.html")}#/pick-result`);
-		if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 		win.once("ready-to-show", () => {
 			isPickResultWindowReady = true;
 		});
@@ -2998,6 +2988,11 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		const win = BrowserWindow$1.fromWebContents(event.sender);
 		if (win && !win.isDestroyed()) win.setIgnoreMouseEvents(ignore, { forward: true });
 	}
+	function setFloatingButtonShape(rects) {
+		if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
+		if (!Array.isArray(rects)) return;
+		floatingButtonWindow.setShape(rects);
+	}
 	function pickStudentsByWeight(count) {
 		const cfg = config.refreshConfig();
 		const pool = (Array.isArray(cfg.studentList) ? cfg.studentList : []).map((s) => ({
@@ -3060,16 +3055,16 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			return configPanelWindow;
 		}
 		const win = new BrowserWindow$1({
-			width: 550,
-			height: 640,
+			width: 980,
+			height: 680,
 			resizable: false,
-			minimizable: false,
+			minimizable: true,
 			maximizable: false,
-			frame: false,
-			transparent: true,
+			frame: true,
+			transparent: false,
 			show: false,
-			alwaysOnTop: true,
-			skipTaskbar: !isDebugMode,
+			skipTaskbar: false,
+			icon: path$2.join(__dirname, "../dist/image/app.ico"),
 			webPreferences: {
 				preload: path$2.join(__dirname, "preload.js"),
 				contextIsolation: true,
@@ -3085,23 +3080,18 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		win.once("ready-to-show", () => {
 			win.show();
 			win.focus();
-			if (isDebugMode) win.webContents.openDevTools({ mode: "detach" });
 		});
 		if (process.env.VITE_DEV_SERVER_URL) win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/config-panel`);
 		else win.loadURL(`file://${path$2.join(__dirname, "../dist/index.html")}#/config-panel`);
 		win.on("closed", () => {
 			configPanelWindow = null;
-			fadeInFloatingButtonWindow();
 		});
 		return win;
 	}
 	function openConfigPanelWindow() {
-		isFloatingHiddenForPickCount = true;
-		fadeOutFloatingButtonWindow();
 		createConfigPanelWindow();
 	}
 	function closeConfigPanelWindow(saved) {
-		isFloatingHiddenForPickCount = false;
 		if (saved) refreshFloatingButtonWindow();
 		if (configPanelWindow && !configPanelWindow.isDestroyed()) configPanelWindow.close();
 		configPanelWindow = null;
@@ -3126,6 +3116,7 @@ var require_windows = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		pickStudentsByWeight,
 		refreshFloatingButtonWindow,
 		setFloatingButtonExpanded,
+		setFloatingButtonShape,
 		setDebugMode,
 		setIgnoreMouseEvents,
 		setQuitting,
@@ -3391,7 +3382,11 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var logging = require_logging();
 	function registerIpcHandlers() {
 		ipcMain$1.handle("floating-button:get-config", () => {
-			return config.refreshConfig().floatingButton;
+			const cfg = config.refreshConfig();
+			return {
+				...cfg.floatingButton,
+				uiAccessEnabled: cfg.admin?.uiAccessEnabled || false
+			};
 		});
 		ipcMain$1.handle("floating-picker:get-config", () => {
 			return config.refreshConfig().pickCountDialog;
@@ -3399,9 +3394,9 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		ipcMain$1.on("floating-picker:confirm", (_event, payload) => {
 			const selectedCount = Math.round(Number(payload && payload.count)) || 1;
 			const count = Math.min(10, Math.max(1, selectedCount));
-			console.log(`Pick count confirmed. count=${count}`);
+			console.log(`进行了一次抽奖，人数为：${count}`);
 			const pickedStudents = windows.pickStudentsByWeight(count);
-			if (pickedStudents.length > 0) console.log(`Picked students: ${pickedStudents.map((s) => s.name).join(", ")}`);
+			if (pickedStudents.length > 0) console.log(`抽中的元素：${pickedStudents.map((s) => s.name).join(", ")}`);
 			windows.openPickResultWindow(pickedStudents);
 		});
 		ipcMain$1.handle("pick-result:get-results", () => {
@@ -3427,6 +3422,9 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		});
 		ipcMain$1.on("floating-button:set-expanded", (_event, payload) => {
 			windows.setFloatingButtonExpanded(payload);
+		});
+		ipcMain$1.on("floating-button:set-shape", (_event, rects) => {
+			windows.setFloatingButtonShape(rects);
 		});
 	}
 	function registerConfigPanelIpc() {
@@ -3508,6 +3506,13 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 		ipcMain$1.handle("config-panel:get-logs", async (_event, maxLines) => {
 			return logging.getLogs(typeof maxLines === "number" ? maxLines : 500);
 		});
+		ipcMain$1.on("config-panel:open-devtools", (_event, target) => {
+			let win = null;
+			if (target === "floating") win = windows.getFloatingButtonWindow();
+			else if (target === "config") win = windows.getConfigPanelWindow();
+			else if (target === "result") win = windows.getPickResultWindow();
+			if (win && !win.isDestroyed()) win.webContents.openDevTools({ mode: "detach" });
+		});
 	}
 	module.exports = {
 		registerIpcHandlers,
@@ -3518,18 +3523,27 @@ var require_ipc = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 //#region src/main/tray-menu.js
 var require_tray_menu = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { Menu } = require("electron");
-	function buildTrayContextMenu({ onOpenConfig, onQuit }) {
-		return Menu.buildFromTemplate([{
-			label: "配置",
-			click: () => {
-				if (typeof onOpenConfig === "function") onOpenConfig();
+	function buildTrayContextMenu({ onOpenConfig, onRestart, onQuit }) {
+		return Menu.buildFromTemplate([
+			{
+				label: "配置",
+				click: () => {
+					if (typeof onOpenConfig === "function") onOpenConfig();
+				}
+			},
+			{
+				label: "重启",
+				click: () => {
+					if (typeof onRestart === "function") onRestart();
+				}
+			},
+			{
+				label: "退出",
+				click: () => {
+					if (typeof onQuit === "function") onQuit();
+				}
 			}
-		}, {
-			label: "退出",
-			click: () => {
-				if (typeof onQuit === "function") onQuit();
-			}
-		}]);
+		]);
 	}
 	module.exports = { buildTrayContextMenu };
 }));
@@ -3539,12 +3553,13 @@ var require_tray = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var { Tray, nativeImage } = require("electron");
 	var path = require("path");
 	var { buildTrayContextMenu } = require_tray_menu();
-	function createTray({ onOpenConfig, onQuit }) {
+	function createTray({ onOpenConfig, onRestart, onQuit }) {
 		const trayIconPath = !!process.env.VITE_DEV_SERVER_URL ? path.join(__dirname, "../public/image/tray.png") : path.join(__dirname, "../dist/image/tray.png");
 		const tray = new Tray(nativeImage.createFromPath(trayIconPath));
 		tray.setToolTip("Blue Random");
 		const trayMenu = buildTrayContextMenu({
 			onOpenConfig,
+			onRestart,
 			onQuit
 		});
 		tray.setContextMenu(trayMenu);
@@ -3569,8 +3584,25 @@ var update = require_update();
 var windows = require_windows();
 var isDebugMode = !!process.env.VITE_DEV_SERVER_URL || process.argv.includes("-debug") || process.argv.includes("--debug");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
-if (admin.IS_UIACCESS_PROCESS) app.commandLine.appendSwitch("disable-direct-composition");
 admin.configureUserDataPath();
+try {
+	const fs = require("fs");
+	const path = require("path");
+	const yaml = require_js_yaml();
+	const cfgPath = path.join(app.getPath("userData"), "config.yml");
+	if (fs.existsSync(cfgPath)) {
+		const raw = yaml.load(fs.readFileSync(cfgPath, "utf8"));
+		const backend = (raw?.admin?.renderingBackend || "d3d9").toLowerCase();
+		if (backend === "vulkan") app.commandLine.appendSwitch("use-angle", "vulkan");
+		else if (backend === "gl") app.commandLine.appendSwitch("use-angle", "gl");
+		else app.commandLine.appendSwitch("use-angle", "d3d9");
+		if (raw?.admin?.disableDirectComposition !== false) app.commandLine.appendSwitch("disable-direct-composition");
+		if (raw?.admin?.disableHardwareAcceleration === true) app.disableHardwareAcceleration();
+	} else {
+		app.commandLine.appendSwitch("use-angle", "d3d9");
+		app.commandLine.appendSwitch("disable-direct-composition");
+	}
+} catch (_) {}
 windows.setDebugMode(isDebugMode);
 logging.attachConsoleLogger();
 logging.registerRendererLogIpc(ipcMain);
@@ -3598,15 +3630,12 @@ app.whenReady().then(() => {
 			} else console.error("UIAccess dll missing:", dllPath);
 		}
 	}
-	if (startupConfig.admin && startupConfig.admin.adminTopmostEnabled && admin.IS_WINDOWS && !admin.isProcessElevated()) {
-		if (admin.requestAdminRelaunch().ok) {
-			windows.setQuitting(true);
-			app.exit(0);
-			return;
-		}
-	}
 	tray.createTray({
 		onOpenConfig: () => windows.openConfigPanelWindow(),
+		onRestart: () => {
+			app.relaunch();
+			app.exit(0);
+		},
 		onQuit: () => app.quit()
 	});
 	ipc.registerConfigPanelIpc();

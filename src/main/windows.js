@@ -1,4 +1,4 @@
-﻿/*
+/*
 ================================================================================
 技术文档：src/main/windows.js
 职责：主进程窗口管理与随机抽取算法 —— 这是最复杂的模块。
@@ -23,9 +23,8 @@
   悬浮按钮   | createFloatingButtonWindow             | 创建透明无边框悬浮按钮窗口
   悬浮按钮   | refreshFloatingButtonWindow            | 关闭旧的悬浮窗（触发重建）
   悬浮按钮   | getFloatingButtonWindowSize            | 计算悬浮窗所需尺寸（含扩展区）
-  悬浮按钮   | setFloatingButtonExpanded              | 切换展开/收缩状态（显示人数选择 UI）
-  悬浮按钮   | resizeFloatingButtonWindow             | 以中心为锚点调整窗口大小
-  悬浮按钮   | fadeInFloatingButtonWindow / fadeOutFloatingButtonWindow | 淡入淡出动画
+  悬浮按钮   | setFloatingButtonShape                | 设置窗口命中区域（SetWindowRgn）
+  悬浮按钮   | fadeInFloatingButtonWindow / fadeOutFloatingButtonWindow | 窗口级 setOpacity 淡入淡出
   悬浮按钮   | persistFloatingButtonPosition          | 退出前保存窗口位置到 config.yml
   悬浮按钮   | startFloatingWindowWatchdog / stopFloatingWindowWatchdog | 看门狗（自动修复）
   -----------|----------------------------------------|------------------------------
@@ -42,7 +41,6 @@
   抽取算法   | pickStudentsByWeight                   | 按权重随机抽取学生（核心算法）
   -----------|----------------------------------------|------------------------------
   工具       | clampBoundsToWorkArea                  | 将窗口约束在工作区内
-  工具       | animateWindowOpacity                   | 通用透明度渐变动画
 
 ================================================================================
 关键设计决策
@@ -55,13 +53,16 @@
      每 450ms 检查悬浮窗是否存活，意外销毁时自动重建。
      原因：Electron 窗口可能因系统原因（驱动崩溃、内存不足）意外关闭。
 
-  3. 鼠标穿透：
-     悬浮按钮空闲时 setIgnoreMouseEvents(true)，让鼠标点击穿透到下层应用。
-     hover/拖拽/选择器打开时设为 false，正常捕获鼠标。
+  3. 鼠标穿透（setShape / SetWindowRgn）：
+     D3D9 下透明窗口不支持像素级命中测试。setShape 在 OS 层面
+     裁剪窗口命中区域 —— 矩形内捕获点击，矩形外穿透。
+     收缩态裁剪为按钮大小，展开态裁剪为控件区域大小。
+     零 JS 开销，不依赖渲染后端透明度行为。
 
-  4. 窗口扩展动画：
-     点击悬浮按钮 → 窗口从 50px 核心区扩展到 ~340px 容纳环绕人数选择器。
-     扩展以窗口中心为锚点，使用 setBounds() 一步到位。
+  4. 淡入淡出（win.setOpacity / SetLayeredWindowAttributes）：
+     D3D9 下 JS/CSS 层级的 opacity 动画不被透明窗口合成器逐帧执行。
+     改用窗口级 setOpacity()，通过 setInterval 每 16ms 更新一次
+     窗口全局透明度。show() + blur() 确保焦点不残留。
 
 ================================================================================
 维护建议
@@ -137,20 +138,8 @@ function refreshFloatingButtonWindow() {
 // ============================================================================
 
 /*
- * 计算悬浮按钮窗口所需的固定尺寸。
- *
- * 窗口需要足够大以容纳"展开态"的环绕人数选择器（环形排列的按钮）。
- * 计算基于按钮核心尺寸（50px × sizePercent/100），推导环形布局所需空间。
- *
- * 公式链：
- *   sizePx = 50 × (sizePercent / 100)           // 按钮核心像素尺寸
- *   base = max(40, sizePx)                       // 最小 40px 下限
- *   actionBtnSize = max(36, base × 0.7)          // 确认/取消按钮大小
- *   placementRadius = max(55, base × 1.05)       // 环形排列半径
- *   ringRadius = placementRadius + ringThickness/2
- *   windowSize = max(340, ringRadius × 2 + 40)   // 最终窗口尺寸（正方形）
- *
- * 返回值固定为正方形（width === height），因为环绕 UI 是圆形的。
+ * 计算悬浮按钮窗口的展开态尺寸（容纳环绕人数选择器）。
+ * 窗口始终为此大小，不再缩放。透明区域通过 setShape 实现鼠标穿透。
  */
 function getFloatingButtonWindowSize() {
   const cfg = config.refreshConfig();
@@ -161,7 +150,7 @@ function getFloatingButtonWindowSize() {
   const ringThickness = actionBtnSize;
   const placementRadius = Math.round(Math.max(55, base * 1.05));
   const ringRadius = placementRadius + Math.round(ringThickness / 2);
-  const windowSize = Math.round(Math.max(340, ringRadius * 2 + 40));
+  const windowSize = Math.round(Math.max(200, ringRadius * 2 + 40));
   
   return { width: windowSize, height: windowSize };
 }
@@ -225,34 +214,12 @@ function resizeFloatingButtonWindow({ width, height }) {
 /*
  * 切换悬浮窗口的展开/收缩状态。
  *
- * 展开时（expanded=true）：
- *   窗口扩大到可容纳环绕人数选择器（由渲染进程计算所需尺寸并通过 IPC 传入）。
- *   渲染进程的 Floating.vue 在 picker 打开时调用此函数。
- *
- * 收缩时（expanded=false）：
- *   窗口缩小到基础尺寸（仅显示圆形按钮）。
- *
- * 调用方：ipc.js 的 floating-button:set-expanded 通道。
+ * 重构（2026-07-18 setShape 方案）：
+ *   窗口大小始终固定为展开态，不再缩放。
+ *   expanded 仅用于状态追踪，窗口形状由像素级穿透 + setIgnoreMouseEvents 控制。
  */
 function setFloatingButtonExpanded(payload) {
-  const expanded = Boolean(payload && payload.expanded);
-  floatingExpanded = expanded;
-  if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
-
-  if (expanded) {
-    const size = payload && payload.size ? payload.size : null;
-    const width = size ? Number(size.width) : NaN;
-    const height = size ? Number(size.height) : NaN;
-    if (Number.isFinite(width) && Number.isFinite(height)) {
-      floatingExpandedSize = { width, height };
-      resizeFloatingButtonWindow({ width, height });
-      return;
-    }
-  }
-
-  floatingExpandedSize = null;
-  const baseSize = getFloatingButtonWindowSize();
-  resizeFloatingButtonWindow(baseSize);
+  floatingExpanded = Boolean(payload && payload.expanded);
 }
 
 /*
@@ -276,39 +243,45 @@ function persistFloatingButtonPosition() {
 
 
 // ============================================================================
-//  3. 通用动画工具
+//  3. 通用窗口 opacity 动画
+//
+//  win.setOpacity() 调用 Windows SetLayeredWindowAttributes，OS 级别。
+//  D3D9 下 JS/CSS 层级的 opacity 动画不被透明窗口合成器逐帧执行，
+//  因此使用 setInterval + setOpacity 替代。
 // ============================================================================
 
-/*
- * 对窗口执行透明度渐变动画。
- *
- * 参数：
- *   win        — 目标 BrowserWindow
- *   fromOpacity — 起始透明度（0-1）
- *   toOpacity   — 目标透明度（0-1）
- *   durationMs  — 动画时长（毫秒）
- *
- * 返回：Promise，动画完成后 resolve。
- *
- * 实现：setInterval 每 16ms（≈60fps）更新一次透明度，线性插值。
- * 窗口销毁时自动停止（清理定时器）。
- */
-function animateWindowOpacity(win, fromOpacity, toOpacity, durationMs) {
+function animateWindowOpacity(win, fromOpacity, toOpacity, durationMs, signal) {
   return new Promise((resolve) => {
     if (!win || win.isDestroyed()) { resolve(); return; }
+    if (signal && signal.aborted) { resolve(); return; }
+
+    const onAbort = () => { clearInterval(timer); resolve(); };
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
 
     const start = Date.now();
     const delta = toOpacity - fromOpacity;
     win.setOpacity(fromOpacity);
 
     const timer = setInterval(() => {
-      if (!win || win.isDestroyed()) { clearInterval(timer); resolve(); return; }
-
+      if (!win || win.isDestroyed()) {
+        clearInterval(timer);
+        if (signal) signal.removeEventListener('abort', onAbort);
+        resolve();
+        return;
+      }
+      if (signal && signal.aborted) {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
       const elapsed = Date.now() - start;
       const t = Math.min(1, elapsed / durationMs);
       win.setOpacity(fromOpacity + delta * t);
-
-      if (t >= 1) { clearInterval(timer); resolve(); }
+      if (t >= 1) {
+        clearInterval(timer);
+        if (signal) signal.removeEventListener('abort', onAbort);
+        resolve();
+      }
     }, 16);
   });
 }
@@ -316,35 +289,64 @@ function animateWindowOpacity(win, fromOpacity, toOpacity, durationMs) {
 
 // ============================================================================
 //  4. 悬浮按钮淡入淡出
+//
+//  使用 _floatingFadeCtrl（AbortController）防止并发动画冲突。
 // ============================================================================
 
-/* 渐隐悬浮按钮（打开抽取结果/配置面板时调用）。400ms 内透明度 1→0，然后 hide()。 */
+let _floatingFadeCtrl = null;
+
+function _cancelFloatingFade() {
+  if (_floatingFadeCtrl) {
+    _floatingFadeCtrl.abort();
+    _floatingFadeCtrl = null;
+  }
+}
+
 async function fadeOutFloatingButtonWindow() {
   if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
   if (!floatingButtonWindow.isVisible()) return;
 
+  _cancelFloatingFade();
+  const ctrl = new AbortController();
+  _floatingFadeCtrl = ctrl;
+
+  /* setOpacity 1→0 渐变（400ms），完成后 hide + 重置 opacity 为 1 */
   const currentOpacity = floatingButtonWindow.getOpacity();
   await animateWindowOpacity(
     floatingButtonWindow,
     Number.isFinite(currentOpacity) ? currentOpacity : 1,
     0,
-    FLOATING_WINDOW_FADE_MS
+    FLOATING_WINDOW_FADE_MS,
+    ctrl.signal
   );
+
+  if (ctrl.signal.aborted) return;
 
   if (floatingButtonWindow && !floatingButtonWindow.isDestroyed()) {
     floatingButtonWindow.hide();
-    floatingButtonWindow.setOpacity(1);  // 重置透明度供下次显示
+    floatingButtonWindow.setOpacity(1);
   }
+  if (_floatingFadeCtrl === ctrl) _floatingFadeCtrl = null;
 }
 
-/* 渐显悬浮按钮（关闭抽取结果/配置面板后调用）。透明度 0→1，400ms。 */
 async function fadeInFloatingButtonWindow() {
   if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
 
+  _cancelFloatingFade();
+  const ctrl = new AbortController();
+  _floatingFadeCtrl = ctrl;
+
+  /*
+   * setOpacity(0) → show() → blur() → setOpacity 0→1 渐变（400ms）。
+   * show()（而非 showInactive）确保 D3D9 下首帧被刷新；
+   * blur() 立即释放 toolbar 窗口无法持有的焦点，防止假死。
+   */
   floatingButtonWindow.setOpacity(0);
   floatingButtonWindow.show();
-  floatingButtonWindow.focus();
-  await animateWindowOpacity(floatingButtonWindow, 0, 1, FLOATING_WINDOW_FADE_MS);
+  floatingButtonWindow.blur();
+  await animateWindowOpacity(floatingButtonWindow, 0, 1, FLOATING_WINDOW_FADE_MS, ctrl.signal);
+
+  if (_floatingFadeCtrl === ctrl) _floatingFadeCtrl = null;
 }
 
 
@@ -391,9 +393,11 @@ function createFloatingButtonWindow() {
     hasShadow: false,
     transparent: true,
     alwaysOnTop: cfg.floatingButton.alwaysOnTop,
-    skipTaskbar: !isDebugMode,
+    skipTaskbar: isDebugMode ? false : !cfg.floatingButton.showInTaskbar,
     type: isDebugMode ? undefined : 'toolbar',
-    focusable: isDebugMode ? true : process.platform !== 'win32',
+    focusable: isDebugMode
+      ? true
+      : process.platform !== 'win32',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -411,17 +415,16 @@ function createFloatingButtonWindow() {
   const win = new BrowserWindow(windowOptions);
   floatingButtonWindow = win;
 
-  /* 如果之前在展开状态，恢复展开尺寸 */
-  if (floatingExpanded && floatingExpandedSize) {
-    resizeFloatingButtonWindow(floatingExpandedSize);
-  }
-
   /* 增强置顶：screen-saver 级别可覆盖全屏应用 */
   if (cfg.floatingButton.alwaysOnTop) {
     win.setAlwaysOnTop(true, 'screen-saver');
   }
-  /* 管理员置顶增强：所有工作区可见 */
-  if (cfg.admin && cfg.admin.adminTopmostEnabled && typeof win.setVisibleOnAllWorkspaces === 'function') {
+  /*
+   * 所有虚拟桌面可见。
+   * 浮窗作为工具覆盖层，应在所有桌面可用，避免 hide/show 时
+   * Windows 将窗口激活到其"归属桌面"导致闪烁切屏。
+   */
+  if (typeof win.setVisibleOnAllWorkspaces === 'function') {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   }
 
@@ -431,7 +434,6 @@ function createFloatingButtonWindow() {
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    if (isDebugMode) win.webContents.openDevTools({ mode: 'detach' });
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
@@ -445,7 +447,6 @@ function createFloatingButtonWindow() {
       if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
       if (isQuitting || isFloatingHiddenForPickCount) return;
       if (!floatingButtonWindow.isVisible()) {
-        floatingButtonWindow.setOpacity(1);
         floatingButtonWindow.show();
       }
     }, 0);
@@ -488,7 +489,6 @@ function startFloatingWindowWatchdog() {
     }
 
     if (!floatingButtonWindow.isVisible()) {
-      floatingButtonWindow.setOpacity(1);
       floatingButtonWindow.show();
     }
   }, 450);
@@ -510,25 +510,40 @@ function stopFloatingWindowWatchdog() {
  * 关闭（隐藏）抽取结果窗口。
  *
  * 不销毁窗口（UIAccess 兼容性要求），仅 hide()。
- * 同时清理抽取结果数据、恢复悬浮按钮显示。
+ * blur() → hide() → setTimeout(show floating) 确保全屏窗口的
+ * 焦点和 z-order 被 Windows 完全清理后再显示悬浮按钮，
+ * 避免悬浮按钮进入半激活僵死状态（可见但点击无响应）。
  */
 function closePickResultWindow() {
   if (!pickResultWindow || pickResultWindow.isDestroyed()) {
     currentPickResults = [];
     activePickResultToken = 0;
     isFloatingHiddenForPickCount = false;
-    fadeInFloatingButtonWindow();
+    setTimeout(() => fadeInFloatingButtonWindow(), 0);
     return;
   }
 
   if (pickResultWindow.isVisible()) {
+    /*
+     * 先 blur 释放焦点，再 hide。
+     * 全屏 alwaysOnTop 窗口可能残留激活状态，
+     * 直接 hide 后 showInactive 悬浮按钮可能无法正常接收点击。
+     */
+    pickResultWindow.blur();
     pickResultWindow.hide();
   }
   
   currentPickResults = [];
   activePickResultToken = 0;
   isFloatingHiddenForPickCount = false;
-  fadeInFloatingButtonWindow();
+
+  /*
+   * setTimeout 确保 hide() 的窗口消息被 Windows 完全处理后再
+   * 显示悬浮按钮，避免 z-order / 激活状态竞争。
+   */
+  setTimeout(() => {
+    fadeInFloatingButtonWindow();
+  }, 0);
 }
 
 /*
@@ -551,7 +566,7 @@ function createPickResultWindowInstance() {
     maximizable: false,
     movable: false,
     alwaysOnTop: true,
-    skipTaskbar: !isDebugMode,
+    skipTaskbar: isDebugMode ? false : !config.refreshConfig().floatingButton.showInTaskbar,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -564,13 +579,16 @@ function createPickResultWindowInstance() {
   isPickResultWindowReady = false;
   win.setMenuBarVisibility(false);
 
+  /* 浮窗已设为所有桌面可见，结果窗同样处理避免切屏 */
+  if (typeof win.setVisibleOnAllWorkspaces === 'function') {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pick-result`);
   } else {
     win.loadURL(`file://${path.join(__dirname, '../dist/index.html')}#/pick-result`);
   }
-
-  if (isDebugMode) win.webContents.openDevTools({ mode: 'detach' });
 
   win.once('ready-to-show', () => { isPickResultWindowReady = true; });
 
@@ -689,6 +707,12 @@ function setIgnoreMouseEvents(event, ignore) {
   if (win && !win.isDestroyed()) {
     win.setIgnoreMouseEvents(ignore, { forward: true });
   }
+}
+
+function setFloatingButtonShape(rects) {
+  if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
+  if (!Array.isArray(rects)) return;
+  floatingButtonWindow.setShape(rects);
 }
 
 
@@ -812,16 +836,16 @@ function createConfigPanelWindow() {
   }
 
   const win = new BrowserWindow({
-    width: 550,
-    height: 640,
+    width: 980,
+    height: 680,
     resizable: false,
-    minimizable: false,
+    minimizable: true,
     maximizable: false,
-    frame: false,
-    transparent: true,
+    frame: true,
+    transparent: false,
     show: false,
-    alwaysOnTop: true,
-    skipTaskbar: !isDebugMode,
+    skipTaskbar: false,
+    icon: path.join(__dirname, '../dist/image/app.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -846,7 +870,6 @@ function createConfigPanelWindow() {
   win.once('ready-to-show', () => {
     win.show();
     win.focus();
-    if (isDebugMode) win.webContents.openDevTools({ mode: 'detach' });
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -858,7 +881,6 @@ function createConfigPanelWindow() {
   win.on('closed', () => {
     configPanelWindow = null;
     isConfigPanelOpen = false;
-    fadeInFloatingButtonWindow();
   });
 
   return win;
@@ -866,14 +888,11 @@ function createConfigPanelWindow() {
 
 function openConfigPanelWindow() {
   isConfigPanelOpen = true;
-  isFloatingHiddenForPickCount = true;
-  fadeOutFloatingButtonWindow();
   createConfigPanelWindow();
 }
 
 function closeConfigPanelWindow(saved) {
   isConfigPanelOpen = false;
-  isFloatingHiddenForPickCount = false;
 
   if (saved) {
     refreshFloatingButtonWindow();
@@ -909,6 +928,7 @@ module.exports = {
   pickStudentsByWeight,
   refreshFloatingButtonWindow,
   setFloatingButtonExpanded,
+  setFloatingButtonShape,
   setDebugMode,
   setIgnoreMouseEvents,
   setQuitting,

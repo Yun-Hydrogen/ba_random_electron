@@ -83,13 +83,13 @@
 
   window 全局变量          | 用途                       | 渠道数
   ─────────────────────────┼────────────────────────────┼──────
-  floatingButtonApi        | 悬浮按钮窗口的交互          | 6
+  floatingButtonApi        | 悬浮按钮窗口的交互          | 8
   floatingPickerApi        | 环绕人数选择器的交互        | 2
   pickResultApi            | 抽奖结果窗口的交互           | 5
   logApi                   | 渲染进程日志上报             | 1
   configPanelApi           | 配置面板的所有 IPC 操作     | 12
                            │                            │
-                           合计                          │ 26 个 IPC 通道
+                           合计                          │ 27 个 IPC 通道
 
 ================================================================================
   四、完整的 IPC 通道清单（26 条）
@@ -103,14 +103,15 @@
   4   | floating-button:drag-end          | Render→Main | send   | floatingButtonApi.endDrag()
   5   | floating-button:set-ignore-mouse  | Render→Main | send   | floatingButtonApi.setIgnoreMouseEvents()
   6   | floating-button:set-expanded      | Render→Main | send   | floatingButtonApi.setExpanded()
-  7   | floating-picker:get-config        | Render→Main | invoke | floatingPickerApi.getConfig()
-  8   | floating-picker:confirm           | Render→Main | send   | floatingPickerApi.confirm()
-  9   | pick-result:get-results           | Render→Main | invoke | pickResultApi.getResults()
-  10  | pick-result:get-config            | Render→Main | invoke | pickResultApi.getConfig()
-  11  | pick-result:close                 | Render→Main | send   | pickResultApi.close()
-  12  | pick-result:open                  | Main→Render | on     | pickResultApi.onOpen()
-  13  | pick-result:reset                 | Main→Render | on     | pickResultApi.onReset()
-  14  | renderer:log                      | Render→Main | send   | logApi.send()
+  7   | floating-button:set-shape         | Render→Main | send   | floatingButtonApi.setShape()
+  8   | floating-picker:get-config        | Render→Main | invoke | floatingPickerApi.getConfig()
+  9   | floating-picker:confirm           | Render→Main | send   | floatingPickerApi.confirm()
+  10  | pick-result:get-results           | Render→Main | invoke | pickResultApi.getResults()
+  11  | pick-result:get-config            | Render→Main | invoke | pickResultApi.getConfig()
+  12  | pick-result:close                 | Render→Main | send   | pickResultApi.close()
+  13  | pick-result:open                  | Main→Render | on     | pickResultApi.onOpen()
+  14  | pick-result:reset                 | Main→Render | on     | pickResultApi.onReset()
+  15  | renderer:log                      | Render→Main | send   | logApi.send()
   15  | config-panel:get-config           | Render→Main | invoke | configPanelApi.getConfig()
   16  | config-panel:save-config          | Render→Main | invoke | configPanelApi.saveConfig()
   17  | config-panel:close                | Render→Main | send   | configPanelApi.close()
@@ -123,6 +124,8 @@
   24  | config-panel:check-update         | Render→Main | invoke | configPanelApi.checkUpdate()
   25  | config-panel:pick-exe-file        | Render→Main | invoke | configPanelApi.pickExeFile()
   26  | config-panel:reset-config         | Render→Main | invoke | configPanelApi.resetConfig()
+  27  | floating-button:css-fade-out      | Main→Render | on     | floatingButtonApi.onCssFadeOut()
+  28  | floating-button:css-fade-in       | Main→Render | on     | floatingButtonApi.onCssFadeIn()
 
 ================================================================================
   五、on* 监听函数的"取消订阅"模式
@@ -188,7 +191,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 // ============================================================================
 //  悬浮按钮窗口桥接 API — window.floatingButtonApi
 //
-//  使用方：FloatingButton.vue（悬浮按钮自身的 Vue 组件）
+//  使用方：Floating.vue（悬浮按钮自身的 Vue 组件）
 //
 //  功能：
 //    - 获取配置（按钮大小、透明度、位置等）
@@ -228,7 +231,39 @@ contextBridge.exposeInMainWorld('floatingButtonApi', {
    * size     — 展开后的窗口尺寸（像素）
    */
   setExpanded: (expanded, size) =>
-    ipcRenderer.send('floating-button:set-expanded', { expanded, size })
+    ipcRenderer.send('floating-button:set-expanded', { expanded, size }),
+
+  /*
+   * 设置窗口命中区域（SetWindowRgn）
+   *
+   * 渲染进程计算控件包围矩形 → 主进程 SetWindowRgn 裁剪。
+   * 矩形外区域自动穿透鼠标事件。
+   * D3D9 下透明窗口不支持像素级命中，setShape 是唯一穿透方案。
+   *
+   * rects — [{ x, y, width, height }] 矩形数组
+   */
+  setShape: (rects) =>
+    ipcRenderer.send('floating-button:set-shape', rects),
+
+  /*
+   * CSS 淡入淡出事件订阅（主进程 → 渲染进程）
+   *
+   * UIAccess 兼容方案：替代窗口级 setOpacity() 动画。
+   * 窗口始终保持 OS 级 opacity=1.0，通过 CSS transition
+   * 在渲染进程内部驱动淡入淡出，避免 DWM/GDI 合成状态损坏。
+   *
+   * 返回取消订阅函数，组件卸载时调用以清理监听器。
+   */
+  onCssFadeOut: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('floating-button:css-fade-out', listener)
+    return () => { ipcRenderer.removeListener('floating-button:css-fade-out', listener) }
+  },
+  onCssFadeIn: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('floating-button:css-fade-in', listener)
+    return () => { ipcRenderer.removeListener('floating-button:css-fade-in', listener) }
+  },
 })
 
 // ============================================================================
@@ -424,5 +459,8 @@ contextBridge.exposeInMainWorld('configPanelApi', {
    * maxLines — 可选，最多返回的行数（默认 500）
    * 返回值：日志条目数组（时间倒序，最新在前）
    */
-  getLogs: (maxLines) => ipcRenderer.invoke('config-panel:get-logs', maxLines)
+  getLogs: (maxLines) => ipcRenderer.invoke('config-panel:get-logs', maxLines),
+
+  /* 打开指定窗口的 DevTools（开发/生产均可用）：'floating' | 'config' | 'result' */
+  openDevTools: (target) => ipcRenderer.send('config-panel:open-devtools', target)
 })

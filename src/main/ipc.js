@@ -61,7 +61,11 @@ function registerIpcHandlers() {
    *  返回：floatingButton 对象（sizePercent, iconDataUrl, borderColor 等）。
    */
   ipcMain.handle('floating-button:get-config', () => {
-    return config.refreshConfig().floatingButton;
+    const cfg = config.refreshConfig();
+    return {
+      ...cfg.floatingButton,
+      uiAccessEnabled: cfg.admin?.uiAccessEnabled || false
+    };
   });
 
   /*
@@ -87,10 +91,10 @@ function registerIpcHandlers() {
   ipcMain.on('floating-picker:confirm', (_event, payload) => {
     const selectedCount = Math.round(Number(payload && payload.count)) || 1;
     const count = Math.min(10, Math.max(1, selectedCount));
-    console.log(`Pick count confirmed. count=${count}`);
+    console.log(`进行了一次抽奖，人数为：${count}`);
     const pickedStudents = windows.pickStudentsByWeight(count);
     if (pickedStudents.length > 0) {
-      console.log(`Picked students: ${pickedStudents.map(s => s.name).join(', ')}`);
+      console.log(`抽中的元素：${pickedStudents.map(s => s.name).join(', ')}`);
     }
     windows.openPickResultWindow(pickedStudents);
   });
@@ -167,6 +171,17 @@ function registerIpcHandlers() {
    */
   ipcMain.on('floating-button:set-expanded', (_event, payload) => {
     windows.setFloatingButtonExpanded(payload);
+  });
+
+  /*
+   *  floating-button:set-shape
+   *  方向：渲染 → 主（单向通知）
+   *  用途：设置窗口命中区域（SetWindowRgn）。D3D9 下透明窗口
+   *        不支持像素级穿透，setShape 是唯一穿透方案。
+   *  参数：rects — [{ x, y, width, height }] 矩形数组。
+   */
+  ipcMain.on('floating-button:set-shape', (_event, rects) => {
+    windows.setFloatingButtonShape(rects);
   });
 }
 
@@ -359,6 +374,26 @@ function registerConfigPanelIpc() {
    */
   ipcMain.handle('config-panel:get-logs', async (_event, maxLines) => {
     return logging.getLogs(typeof maxLines === 'number' ? maxLines : 500);
+  });
+
+  /*
+   *  config-panel:open-devtools
+   *  方向：渲染 → 主（请求-响应）
+   *  用途：打开指定窗口的 DevTools（开发/生产均可用）。
+   *  参数：target — 'floating' | 'config' | 'result'
+   */
+  ipcMain.on('config-panel:open-devtools', (_event, target) => {
+    let win = null;
+    if (target === 'floating') {
+      win = windows.getFloatingButtonWindow();
+    } else if (target === 'config') {
+      win = windows.getConfigPanelWindow();
+    } else if (target === 'result') {
+      win = windows.getPickResultWindow();
+    }
+    if (win && !win.isDestroyed()) {
+      win.webContents.openDevTools({ mode: 'detach' });
+    }
   });
 }
 

@@ -18,18 +18,14 @@
   注意事项：
     - 名单文本(textarea)和 studentList 数组之间需要双向同步，但要避免死循环
       用 syncingFromList 标志位区分"用户正在输入"和"外部数据变更"
-    - 权重滑条 0~5 步长 0.1，重量滑条有轨道填充效果(rangeFill)
+    - 权重滑条 0~5 步长 0.1，由 UiSlider 组件提供轨道填充
     - 芯片 tooltip 通过 emit('chip-hover'/'chip-leave') 通知父组件的全局 tooltip
-    - LCP 优化：描述文字(card-desc)延迟一个动画帧渲染
 -->
 
 <template>
   <div class="tab-page">
     <!-- 名单导入 -->
-    <div class="card">
-      <div class="card-title">名单导入</div>
-      <div v-if="showDesc" class="card-desc">导入 txt/csv 文件或粘贴名单于输入框中（每行一名同学）</div>
-      <div v-else class="card-desc-skeleton"></div>
+    <UiCard title="名单导入" desc="导入 txt/csv 文件或粘贴名单于输入框中（每行一名同学）">
       <div class="import-capsule">
         <label class="upload-btn">
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -62,13 +58,10 @@
           </div>
         </div>
       </div>
-    </div>
+    </UiCard>
 
-    <!-- 权重管理 -->
-    <div class="card">
-      <div class="card-title">权重管理</div>
-      <div v-if="showDesc" class="card-desc">调整每位同学的抽取权重（越高越容易被抽到）以及重复抽取规则</div>
-      <div v-else class="card-desc-skeleton"></div>
+    <!-- 二、权重管理 -->
+    <UiCard title="权重管理" desc="调整每位同学的抽取权重（越高越容易被抽到）以及重复抽取规则">
       <div class="weight-head-row">
         <label class="inline-check">
           <input type="checkbox" :checked="allowRepeatDraw" @change="$emit('update:allowRepeatDraw', ($event.target).checked)" />
@@ -90,15 +83,14 @@
           >
             <span class="roster-name">{{ s.name }}</span>
             <div class="roster-weight">
-              <input type="range" min="0" max="5" step="0.1" :value="s.weight" @input="setWeight(i, $event)" class="weight-slider" :style="rangeFill(s.weight,0,5)" />
-              <span class="weight-val">{{ s.weight.toFixed(1) }}</span>
+              <UiSlider :modelValue="s.weight" :min="0" :max="5" :step="0.1" :color="tabTheme" :displayValue="s.weight.toFixed(1)" @update:modelValue="setWeight(i, $event)" />
               <span class="weight-prob">{{ studentProb(s) }}</span>
             </div>
             <button class="roster-del" @click="removeStudent(i)">✕</button>
           </div>
         </div>
       </div>
-    </div>
+    </UiCard>
   </div>
 </template>
 
@@ -109,12 +101,14 @@
  *  2. 名单文本同步  —— textarea  ←→  studentList 数组 双向转换
  *  3. 文件导入      —— 读取用户选择的 txt/csv 文件
  *  4. 权重操作      —— 单个修改 / 删除学生 / 批量重置 / 概率计算
- *  5. 滑条轨道填充  —— 计算已滑动区域的渐变色
- *  6. 延迟渲染      —— LCP 优化：card-desc 晚一帧显示
- *  7. 数据监听      —— 外部数据变化时自动回填 textarea
- *  8. 芯片点击跳转  —— 点击芯片滚动到权重列表对应行并高亮
+ *  5. 数据监听      —— 外部数据变化时自动回填 textarea
+ *  6. 芯片点击跳转  —— 点击芯片滚动到权重列表对应行并高亮
  */
 import { ref, computed, watch, onMounted } from 'vue'
+import { UiCard, UiSlider } from '../RizUI'
+
+/* Tab 主题色 */
+const tabTheme = '#66ccff'
 
 /*
  *  props：父组件传入的数据
@@ -204,9 +198,9 @@ function handleFileUpload(e) {
  *  参数 e: input 事件对象，e.target.value 是滑条的当前值
  *  注意：必须创建新数组再 emit，Vue 的响应式依赖引用变化
  */
-function setWeight(i, e) {
+function setWeight(i, val) {
   const list = [...props.studentList]
-  list[i] = { ...list[i], weight: parseFloat(e.target.value) }
+  list[i] = { ...list[i], weight: val }
   emit('update:studentList', list)
 }
 
@@ -249,31 +243,8 @@ function studentProb(s) {
   return ((s.weight / tw) * 100).toFixed(2) + '%'
 }
 
-/*
- *  计算滑条已填充部分的 CSS 渐变样式
- *  参数 val: 滑条当前值, min: 最小值, max: 最大值
- *  返回：{ background: 'linear-gradient(...)' } 可直接绑定到 :style
- *  效果：已滑动区域显示主题色 #66ccff，未滑动区域灰色 #e0e5ea
- */
-function rangeFill(val, min, max) {
-  const pct = ((val - min) / (max - min)) * 100
-  return { background: `linear-gradient(to right, #66ccff 0%, #66ccff ${pct}%, #e0e5ea ${pct}%, #e0e5ea 100%)` }
-}
-
 // ================================================================
-//  5. LCP 优化：延迟渲染描述文字
-// ================================================================
-
-/*
- *  showDesc 控制 card-desc 的显示时机
- *  初始 false → 显示骨架占位 → requestAnimationFrame 后变 true → 显示真实文字
- *  作用：让标题和表单控件先绘制，描述文字晚一帧出现，降低 LCP 指标
- */
-const showDesc = ref(false)
-onMounted(() => requestAnimationFrame(() => { showDesc.value = true }))
-
-// ================================================================
-//  6. 数据监听：外部数据变化时自动同步 textarea
+//  5. 数据监听：外部数据变化时自动同步 textarea
 // ================================================================
 
 /*
@@ -356,70 +327,6 @@ function scrollToStudent(i) {
   background: transparent;
 }
 
-/* ===== 卡片（通用容器） ===== */
-.card {
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  border-radius: 14px;
-  background: #f8fafc;
-  border: 1px solid #e8ecf2;
-}
-.card-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #334;
-  margin-bottom: 4px;
-}
-.card-desc {
-  font-size: 12px;
-  color: #99a;
-  margin-bottom: 12px;
-  line-height: 1.5;
-}
-.card-desc-skeleton {
-  height: 36px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #e8ecf2 25%, #f0f2f5 50%, #e8ecf2 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* ===== 配置行（通用布局） ===== */
-.cfg-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #f5f5f5;
-}
-.cfg-row label:first-child {
-  font-size: 14px;
-  color: #444;
-}
-.cfg-row-col {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-.cfg-hint-text {
-  font-size: 11px;
-  color: #99a;
-}
-.cfg-slider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cfg-slider span {
-  font-size: 13px;
-  color: #888;
-  min-width: 36px;
-}
 .cfg-input {
   width: 80px;
   padding: 4px 8px;
@@ -427,66 +334,6 @@ function scrollToStudent(i) {
   border-radius: 6px;
   font-size: 13px;
   text-align: center;
-}
-
-/* ===== Switch 开关 ===== */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  cursor: pointer;
-}
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.switch-track {
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  background: #ccc;
-  transition: 0.2s;
-}
-.switch-track::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  transition: 0.2s;
-}
-.switch input:checked + .switch-track {
-  background: var(--accent);
-}
-.switch input:checked + .switch-track::after {
-  transform: translateX(20px);
-}
-
-/* ===== 通用滑条 ===== */
-input[type=range] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 140px;
-  height: 6px;
-  border-radius: 3px;
-  accent-color: var(--accent);
-  background: #e0e5ea;
-  outline: none;
-  cursor: pointer;
-}
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 /* ===== 名单导入区域 ===== */
@@ -719,34 +566,6 @@ input[type=range]::-webkit-slider-thumb {
   color: #667;
 }
 
-/* 权重滑条（浓缩版） */
-.weight-slider {
-  width: 70px;
-  height: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  border-radius: 2px;
-  outline: none;
-  cursor: pointer;
-  vertical-align: middle;
-}
-.weight-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-}
-.weight-val {
-  display: inline-block;
-  width: 28px;
-  text-align: right;
-  font-size: 11px;
-  font-weight: 600;
-  color: #88a;
-}
 .weight-prob {
   display: inline-block;
   min-width: 48px;

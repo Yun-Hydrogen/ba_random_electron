@@ -13,9 +13,9 @@
     ───────────────┼────────────────────────────────────────────
     1. 开机自启    | 程序路径（含选取按钮）、计划任务名、管理员运行开关
     2. 置顶增强    | 管理员置顶开关、UIAccess 置顶开关（仅管理员可见）
-    3. 配置管理    | 配置文件路径展示、打开目录、重置配置（二次确认）、重启
-    4. 检查更新    | 从 GitHub Releases 拉取最新版本信息
-    5. 关于        | 字体授权、开源协议、项目链接、Blue Archive 版权声明
+    3. 渲染后端    | 图形后端选择（d3d9/vulkan/gl）、禁用直接合成、放弃 GPU 加速
+    4. 配置管理    | 配置文件路径展示、打开目录、重置配置（二次确认）、重启
+    5. 检查更新    | 从 GitHub Releases 拉取最新版本信息
 
 ================================================================================
   二、数据流架构
@@ -53,27 +53,26 @@
 ================================================================================
   三、主题与样式
 ================================================================================
-  主题色：紫 #aa88dd
-  所有控件颜色均硬编码在 <style scoped> 中，不依赖 CSS 变量。
+  主题色：紫 #aa88dd，通过 tabTheme 变量传给 UiSwitch。
   滚动条按组件独立着色（rgba(170,136,221,*) 系列）。
 
 ================================================================================
   四、关键实现细节
 ================================================================================
-  - 卡片描述采用骨架屏延迟渲染（showDesc + requestAnimationFrame）降低 LCP
   - "重置所有配置"按钮为红色警告样式（.adv-btn-danger），点击后弹出确认 Dialog
   - Dialog 使用 Vue <Transition> 实现飞入飞出动画
   - 文件选取通过 window.configPanelApi.pickExeFile() 调用主进程文件对话框
+  - 图形后端选择使用自定义下拉组件（cfg-dropdown），替代原生 <select>
+  - v-click-outside 指令用于自定义下拉的点击外部关闭
 
 ================================================================================
   五、维护注意事项
 ================================================================================
   - 新增配置项时，需同时在父组件 ConfigPanel.vue 的 draft 中初始化对应字段
   - emit 事件名需与父组件的 @event-name 监听器保持一致
-  - 修改主题色时需同步更新滚动条 rgba 值和所有硬编码的 #aa88dd
   - 不要在此组件中直接修改 props，始终通过 emit('update:admin', ...) 上报
 
-  最后更新：2026-06-27
+  最后更新：2026-07-21
 ================================================================================
 -->
 
@@ -83,19 +82,10 @@
       一、开机自启
       通过 Windows 任务计划程序（Task Scheduler）实现登录时自动启动
     -->
-    <div class="card">
-      <div class="card-title">开机自启</div>
-      <div v-if="showDesc" class="card-desc">通过 Windows 计划任务实现登录时自动启动</div>
-      <div v-else class="card-desc-skeleton"></div>
+    <UiCard title="开机自启" desc="通过 Windows 计划任务实现登录时自动启动">
 
       <!-- 程序路径：文本输入框 + 选取按钮 -->
-      <div class="cfg-row">
-        <div class="cfg-label-col">
-          <label>程序路径</label>
-          <span class="cfg-hint-text">可执行文件(.exe)的完整路径</span>
-        </div>
-      </div>
-      <div class="cfg-row" style="border:none; padding-top:0;">
+      <UiConfigRow label="程序路径" hint="可执行文件(.exe)的完整路径" stack>
         <div class="adv-input-row">
           <input
             type="text"
@@ -106,16 +96,10 @@
           />
           <button class="adv-btn adv-btn-sm" @click="pickExePath">选取</button>
         </div>
-      </div>
+      </UiConfigRow>
 
       <!-- 计划任务名 -->
-      <div class="cfg-row">
-        <div class="cfg-label-col">
-          <label>计划任务名</label>
-          <span class="cfg-hint-text">在 Windows 任务计划程序中的显示名称</span>
-        </div>
-      </div>
-      <div class="cfg-row" style="border:none; padding-top:0;">
+      <UiConfigRow label="计划任务名" hint="在 Windows 任务计划程序中的显示名称" stack>
         <input
           type="text"
           :value="admin.adminAutoStartTaskName"
@@ -123,112 +107,84 @@
           class="adv-input"
           placeholder="Blue Random (Admin)"
         />
-      </div>
+      </UiConfigRow>
 
       <!-- 管理员运行开关 + 创建任务按钮 -->
-      <div class="cfg-row">
-        <div class="cfg-label-col">
-          <label>以管理员身份运行</label>
-          <span class="cfg-hint-text">计划任务触发时自动获取管理员权限</span>
-        </div>
-        <label class="switch">
-          <input
-            type="checkbox"
-            :checked="admin.adminAutoStartAdmin !== false"
-            @change="$emit('update:admin', { ...admin, adminAutoStartAdmin: $event.target.checked })"
-          />
-          <span class="switch-track"></span>
-        </label>
-      </div>
-      <div class="cfg-row" style="border:none;">
-        <span></span>
+      <UiConfigRow label="以管理员身份运行" hint="计划任务触发时自动获取管理员权限">
+        <UiSwitch :modelValue="admin.adminAutoStartAdmin !== false" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, adminAutoStartAdmin: $event })" />
+      </UiConfigRow>
+      <div style="border-top: 1px solid var(--c-border); padding-top: 16px; display: flex; justify-content: flex-end;">
         <button class="adv-btn" @click="$emit('create-startup-task')">创建 / 更新计划任务</button>
       </div>
-    </div>
+    </UiCard>
 
-    <!--
-      二、置顶增强
-      确保悬浮窗始终显示在其他窗口之上
-    -->
-    <div class="card">
-      <div class="card-title">置顶增强</div>
-      <div v-if="showDesc" class="card-desc">确保悬浮窗始终显示在其他窗口之上</div>
-      <div v-else class="card-desc-skeleton"></div>
-
-      <!-- 管理员置顶 -->
-      <div class="cfg-row">
-        <div class="cfg-label-col">
-          <label>管理员置顶</label>
-          <span class="cfg-hint-text">以管理员权限运行时强制置顶</span>
-        </div>
-        <label class="switch">
-          <input
-            type="checkbox"
-            :checked="admin.adminTopmostEnabled"
-            @change="$emit('update:admin', { ...admin, adminTopmostEnabled: $event.target.checked })"
-          />
-          <span class="switch-track"></span>
-        </label>
-      </div>
+    <!-- 二、置顶增强 -->
+    <UiCard title="置顶增强" desc='系统级置顶权限（基本置顶请在"悬浮按钮"标签页设置）'>
 
       <!-- UIAccess 置顶：仅当进程已是管理员时显示 -->
-      <div class="cfg-row" v-if="appInfo.isAdmin">
-        <div class="cfg-label-col">
-          <label>UIAccess 置顶</label>
-          <span class="cfg-hint-text">更高级别的置顶权限，需要 UIAccess DLL 支持</span>
-        </div>
-        <label class="switch">
-          <input
-            type="checkbox"
-            :checked="admin.uiAccessEnabled"
-            @change="$emit('update:admin', { ...admin, uiAccessEnabled: $event.target.checked })"
-          />
-          <span class="switch-track"></span>
-        </label>
-      </div>
+      <UiConfigRow v-if="appInfo.isAdmin" label="UIAccess 置顶" hint="系统级置顶权限，可覆盖锁屏/UAC/独占全屏，需要 UIAccess DLL 支持">
+        <UiSwitch :modelValue="admin.uiAccessEnabled" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, uiAccessEnabled: $event })" />
+      </UiConfigRow>
       <div v-if="!appInfo.uiAccessDllExists && admin.uiAccessEnabled" class="cfg-hint warn">
         ⚠ 未检测到 uiaccess.dll，UIAccess 功能将不可用
       </div>
-    </div>
+    </UiCard>
 
-    <!--
-      三、配置管理
-      管理配置文件和应用生命周期
-    -->
-    <div class="card">
-      <div class="card-title">配置管理</div>
-      <div v-if="showDesc" class="card-desc">管理配置文件和应用状态</div>
-      <div v-else class="card-desc-skeleton"></div>
+    <!-- 三、渲染后端 -->
+    <UiCard title="渲染后端" desc="切换 Chromium 图形后端，需重启生效。通常情况下，D3D9作为后端可以获得最佳的性能和兼容性。如果遇到渲染问题可尝试更改此处的选项。">
+
+      <UiConfigRow label="图形后端" hint="通常情况下推荐选择D3D9作为渲染后端。Vulkan / OpenGL 可能存在性能问题。需要重启。">
+        <!-- 自定义下拉框 -->
+        <div class="cfg-dropdown" :class="{ 'is-open': backendOpen }" v-click-outside="() => backendOpen = false">
+          <button class="cfg-dropdown-trigger" @click="backendOpen = !backendOpen" type="button">
+            <span>{{ backendLabel }}</span>
+            <svg class="cfg-dropdown-arrow" viewBox="0 0 12 7" width="10" height="6"><path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          </button>
+          <transition name="drop-pop">
+            <div v-if="backendOpen" class="cfg-dropdown-drop">
+              <button
+                v-for="opt in backendOptions"
+                :key="opt.value"
+                class="cfg-dropdown-opt"
+                :class="{ active: (admin.renderingBackend || 'd3d9') === opt.value }"
+                @click="selectBackend(opt.value)"
+                type="button"
+              >{{ opt.label }}</button>
+            </div>
+          </transition>
+        </div>
+      </UiConfigRow>
+
+      <UiConfigRow label="禁用直接合成" hint="对于D3D9后端，禁用直接合成(启用开关)可能有助于解决某些渲染问题。重启生效。">
+        <UiSwitch :modelValue="admin.disableDirectComposition !== false" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, disableDirectComposition: $event })" />
+      </UiConfigRow>
+
+      <UiConfigRow label="放弃 GPU 加速" hint="启用后完全回退到 CPU 软件渲染（包括动画、WebGL 等全部由 CPU 计算）。仅用于排查兼容性问题，日常使用不建议开启。重启生效。">
+        <UiSwitch :modelValue="admin.disableHardwareAcceleration === true" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, disableHardwareAcceleration: $event })" />
+      </UiConfigRow>
+    </UiCard>
+
+    <!-- 四、配置管理 -->
+    <UiCard title="配置管理" desc="管理配置文件和应用状态">
 
       <!-- 配置文件路径 + 打开目录按钮 -->
-      <div class="cfg-row">
-        <div class="cfg-label-col">
-          <label>配置文件</label>
-          <span class="cfg-hint-text">{{ appInfo.configPath || '未获取' }}</span>
-        </div>
+      <UiConfigRow label="配置文件" :hint="appInfo.configPath || '未获取'">
         <button class="adv-btn adv-btn-sm" @click="$emit('show-in-explorer')">打开 →</button>
-      </div>
+      </UiConfigRow>
 
-      <!-- 操作按钮组：重置 / 重启 / 管理员重启 -->
-      <div class="cfg-row" style="border:none;">
-        <span></span>
+      <!-- 操作按钮组 -->
+      <div style="border-top: 1px solid var(--c-border); padding-top: 16px; display: flex; justify-content: flex-end;">
         <div class="adv-btn-group">
           <button class="adv-btn adv-btn-danger" @click="showResetDialog = true">重置所有配置</button>
           <button class="adv-btn" @click="$emit('restart')">重启应用</button>
           <button class="adv-btn" @click="$emit('admin-elevate')">管理员重启</button>
         </div>
       </div>
-    </div>
+    </UiCard>
 
-    <!--
-      四、检查更新
-      从 GitHub Releases API 获取最新版本信息
-    -->
-    <div class="card">
-      <div class="card-title">检查更新</div>
-      <div v-if="showDesc" class="card-desc no-bottom-padding">从 GitHub Releases 检查是否有新版本</div>
-      <div v-else class="card-desc-skeleton"></div>
-      <div class="cfg-row" style="border:none;">
+    <!-- 五、检查更新 -->
+    <UiCard title="检查更新" desc="从 GitHub Releases 检查是否有新版本">
+      <div style="padding: 8px 0;">
         <button
           class="adv-btn adv-btn-full"
           :disabled="updateLoading"
@@ -239,66 +195,7 @@
       </div>
       <div v-if="updateStatus" class="cfg-hint" :class="updateStatus">{{ updateTitle }}</div>
       <div v-if="updateDetail" class="update-detail-text">{{ updateDetail }}</div>
-    </div>
-
-    <!--
-      五、关于
-      字体授权、开源协议、第三方资源与版权声明
-    -->
-    <div class="card">
-      <div class="card-title">关于</div>
-      <div class="about-section">
-
-        <p class="about-item">
-          <span class="about-label">界面字体</span>
-          南西新圆体 —
-          <a href="https://opensource.org/license/IPA" target="_blank" rel="noopener">IPA Font License</a>
-        </p>
-
-        <p class="about-item">
-          <span class="about-label">源码许可</span>
-          <a href="https://www.gnu.org/licenses/agpl-3.0.en.html#license-text" target="_blank" rel="noopener">GNU Affero Generaal Public License Version 3</a>
-        </p>
-
-        <p class="about-item">
-          <span class="about-label">项目主页</span>
-          <a href="https://github.com/Yun-Hydrogen/ba_random_electron" target="_blank" rel="noopener">Ba-Random GitHub</a>
-        </p>
-
-        <p class="about-item">
-          <span class="about-label">三方组件</span>
-          UIAccess
-          <a href="https://github.com/shc0743/RunUIAccess" target="_blank" rel="noopener">GitHub </a>
-          |
-          <a href="https://github.com/shc0743/RunUIAccess/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
-        </p>
-
-        <p class="about-item">
-          <span class="about-label">相关链接</span>
-          《蔚蓝档案》国际
-          <a href="https://bluearchive.nexon.com/" target="_blank" rel="noopener">Blue Archive</a>
-        </p>
-
-        <p class="about-item">
-          <span class="about-label">相关链接</span>
-          《蔚蓝档案》国服
-          <a href="https://bluearchive-cn.com/" target="_blank" rel="noopener">蔚蓝档案</a>
-        </p>
-
-        <p class="about-item about-copyright">
-          Blue Archive由NEXON Korea Corp.&amp;NEXON GAMES Co.,Ltd.持有版权并保留所有权利。
-          在中国大陆区域，《蔚蓝档案》由 NEXON GAMES Co., Ltd. 和 Shanghai Yostar Co., Ltd. 持有版权并保留所有权利。
-        </p>
-
-        <p class="about-item about-copyright">
-          《蔚蓝点名》是一款从《蔚蓝档案》和 Blue Archive 获得灵感而开放的非官方的第三方工具，软件源代码与 NEXON Korea Corp.、NEXON GAMES Co., Ltd.、Shanghai Yostar Co., Ltd. 没有任何关联。
-        </p>
-        
-        <p class="about-item about-copyright">
-          《蔚蓝点名》使用了部分来自《蔚蓝档案》和 Blue Archive 的游戏美术和音乐资源，这些资源的版权归 NEXON Korea Corp.、NEXON GAMES Co., Ltd.、Shanghai Yostar Co., Ltd. 所有。
-        </p>
-      </div>
-    </div>
+    </UiCard>
 
     <!--
       重置确认 Dialog
@@ -331,7 +228,11 @@
 //  ref      — 创建响应式变量（值变化时自动更新界面）
 //  onMounted — 组件挂载完成后的生命周期钩子
 // ============================================================
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { UiCard, UiConfigRow, UiSwitch } from '../RizUI'
+
+/* Tab 主题色 */
+const tabTheme = '#aa88dd'
 
 // ============================================================
 //  Props 定义（从父组件 ConfigPanel.vue 接收的数据）
@@ -343,7 +244,9 @@ const props = defineProps({
    * admin — 高级设置对象
    * 包含管理员权限、计划任务、UIAccess 等高级配置
    * 常用字段：adminAutoStartPath, adminAutoStartTaskName,
-   *           adminAutoStartAdmin, adminTopmostEnabled, uiAccessEnabled
+   *           adminAutoStartAdmin, uiAccessEnabled,
+   *           renderingBackend, disableDirectComposition,
+   *           disableHardwareAcceleration
    */
   admin: Object,
 
@@ -411,18 +314,56 @@ const emit = defineEmits([
 //  状态与生命周期
 // ============================================================
 
+// ============================================================
+//  自定义下拉框（替代原生 <select>）
+//
+//  使用 div + button 实现，配合 v-click-outside 指令。
+//  下拉面板使用 Vue <Transition name="drop-pop"> 动画。
+// ============================================================
+
+/* 下拉框展开/关闭状态 */
+const backendOpen = ref(false)
+
+/* 可选的渲染后端列表 */
+const backendOptions = [
+  { value: 'd3d9', label: 'D3D9 (默认)' },
+  { value: 'vulkan', label: 'Vulkan' },
+  { value: 'gl', label: 'OpenGL' }
+]
+
+/* 当前选中后端的显示文本 */
+const backendLabel = computed(() => {
+  const val = props.admin.renderingBackend || 'd3d9'
+  const opt = backendOptions.find(o => o.value === val)
+  return opt ? opt.label : val
+})
+
+/* 选择后端：emit 更新 + 关闭下拉 */
+function selectBackend(value) {
+  emit('update:admin', { ...props.admin, renderingBackend: value })
+  backendOpen.value = false
+}
+
 /*
- * showDesc — 控制卡片描述文字的显示
- *
- * 初始值为 false，组件挂载后在下一个动画帧设为 true。
- * 目的：减少首次渲染的 DOM 复杂度（LCP 优化）。
- * 为 false 时显示骨架屏占位（.card-desc-skeleton），
- * 为 true 时显示真实描述文字（.card-desc）。
- *
- * 注意：这个延迟只影响描述文字，不影响卡片标题和控件。
+ * v-click-outside 自定义指令
+ * 点击/触摸元素外部时触发回调，用于关闭下拉面板。
+ * 同时监听 mousedown 和 touchstart，捕获阶段确保不被 stopPropagation 阻止。
  */
-const showDesc = ref(false)
-onMounted(() => requestAnimationFrame(() => { showDesc.value = true }))
+const vClickOutside = {
+  mounted(el, binding) {
+    el._clickOutside = (event) => {
+      if (!(el === event.target || el.contains(event.target))) {
+        binding.value()
+      }
+    }
+    document.addEventListener('mousedown', el._clickOutside, true)
+    document.addEventListener('touchstart', el._clickOutside, true)
+  },
+  unmounted(el) {
+    document.removeEventListener('mousedown', el._clickOutside, true)
+    document.removeEventListener('touchstart', el._clickOutside, true)
+  }
+}
 
 // ============================================================
 //  函数：confirmReset — 确认重置配置
@@ -543,89 +484,6 @@ async function pickExePath() {
   background: transparent;
 }
 
-/* =================================================================
-   3. 卡片容器与标题
-   每个功能板块用一张卡片包裹。
-   ================================================================= */
-.card {
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  border-radius: 14px;
-  background: #f8fafc;
-  border: 1px solid #e8ecf2;
-}
-
-.card-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #334;
-  margin-bottom: 4px;
-}
-
-/* 卡片描述文字 */
-.card-desc {
-  font-size: 12px;
-  color: #99a;
-  margin-bottom: 12px;
-  line-height: 1.5;
-}
-
-/* 移除描述文字下边距的变体（检查更新板块使用） */
-.card-desc.no-bottom-padding {
-  margin-bottom: 0;
-}
-
-/* 骨架屏占位（描述文字加载前显示，降低 LCP） */
-.card-desc-skeleton {
-  height: 36px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #e8ecf2 25%, #f0f2f5 50%, #e8ecf2 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* =================================================================
-   4. 配置行（标签 + 控件）
-   每一行配置项的容器，标签在左、控件在右。
-   ================================================================= */
-.cfg-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #f5f5f5;
-}
-
-/* 行内第一个 label 元素的统一样式 */
-.cfg-row label:first-child {
-  font-size: 14px;
-  color: #444;
-}
-
-/* 标签列（标签 + 提示文字的纵向容器） */
-.cfg-label-col {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* 标签下方的提示小字 */
-.cfg-hint-text {
-  font-size: 11px;
-  color: #99a;
-  word-break: break-all;
-}
-
 /* 通用提示信息 */
 .cfg-hint {
   font-size: 12px;
@@ -691,59 +549,7 @@ async function pickExePath() {
 }
 
 /* =================================================================
-   6. Switch 开关
-   纯 CSS 实现，不使用原生 checkbox 外观。
-   结构：label.switch > input[checkbox] + span.switch-track
-   ================================================================= */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-  cursor: pointer;
-}
-
-/* 隐藏原生 checkbox */
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-/* 开关轨道 */
-.switch-track {
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  background: #ccc;
-  transition: 0.2s;
-}
-
-/* 开关圆形滑块（使用 ::after 伪元素） */
-.switch-track::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  transition: 0.2s;
-}
-
-/* 选中态：轨道变主题色 */
-.switch input:checked + .switch-track {
-  background: #aa88dd;
-}
-
-/* 选中态：滑块右移 */
-.switch input:checked + .switch-track::after {
-  transform: translateX(20px);
-}
-
-/* =================================================================
-   7. 按钮
+   6. 按钮
    圆角胶囊按钮，主题色填充。
    变体：sm（小号）/ full（通栏）/ outline（线框）/ danger（危险）
    ================================================================= */
@@ -817,6 +623,88 @@ async function pickExePath() {
   justify-content: flex-end;
 }
 
+/* 自定义下拉选择器 */
+.cfg-dropdown {
+  position: relative;
+  min-width: 170px;
+  user-select: none;
+}
+.cfg-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  border: 1.5px solid #ccd;
+  border-radius: 999px;
+  background: #fff;
+  color: #445;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.cfg-dropdown.is-open .cfg-dropdown-trigger,
+.cfg-dropdown-trigger:hover {
+  border-color: #aa88dd;
+}
+
+.cfg-dropdown-arrow {
+  flex-shrink: 0;
+  color: #99a;
+  transition: transform 0.2s;
+}
+.cfg-dropdown.is-open .cfg-dropdown-arrow {
+  transform: rotate(180deg);
+  color: #aa88dd;
+}
+.cfg-dropdown-drop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1.5px solid #e8e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(80,60,120,0.12);
+  overflow: hidden;
+  padding: 4px;
+}
+.cfg-dropdown-opt {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #445;
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.cfg-dropdown-opt:hover {
+  background: rgba(170,136,221,0.1);
+  color: #aa88dd;
+}
+.cfg-dropdown-opt.active {
+  background: rgba(170,136,221,0.15);
+  color: #aa88dd;
+  font-weight: 600;
+}
+
+/* 下拉动画 */
+.drop-pop-enter-active { animation: drop-in 0.18s ease-out; }
+.drop-pop-leave-active { animation: drop-in 0.12s ease-in reverse; }
+@keyframes drop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* =================================================================
    8. 关于板块
    ================================================================= */
@@ -841,10 +729,11 @@ async function pickExePath() {
 .about-section a {
   color: #aa88dd;
   text-decoration: none;
+  transition: color 0.15s;
 }
 
 .about-section a:hover {
-  text-decoration: underline;
+  color: #8866bb;
 }
 
 /* 版权声明文字（更小、更淡） */

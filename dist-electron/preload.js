@@ -12,7 +12,22 @@ contextBridge.exposeInMainWorld("floatingButtonApi", {
 	setExpanded: (expanded, size) => ipcRenderer.send("floating-button:set-expanded", {
 		expanded,
 		size
-	})
+	}),
+	setShape: (rects) => ipcRenderer.send("floating-button:set-shape", rects),
+	onCssFadeOut: (callback) => {
+		const listener = () => callback();
+		ipcRenderer.on("floating-button:css-fade-out", listener);
+		return () => {
+			ipcRenderer.removeListener("floating-button:css-fade-out", listener);
+		};
+	},
+	onCssFadeIn: (callback) => {
+		const listener = () => callback();
+		ipcRenderer.on("floating-button:css-fade-in", listener);
+		return () => {
+			ipcRenderer.removeListener("floating-button:css-fade-in", listener);
+		};
+	}
 });
 contextBridge.exposeInMainWorld("floatingPickerApi", {
 	getConfig: () => ipcRenderer.invoke("floating-picker:get-config"),
@@ -54,6 +69,7 @@ contextBridge.exposeInMainWorld("configPanelApi", {
 	checkUpdate: () => ipcRenderer.invoke("config-panel:check-update"),
 	pickExeFile: () => ipcRenderer.invoke("config-panel:pick-exe-file"),
 	resetConfig: () => ipcRenderer.invoke("config-panel:reset-config"),
-	getLogs: (maxLines) => ipcRenderer.invoke("config-panel:get-logs", maxLines)
+	getLogs: (maxLines) => ipcRenderer.invoke("config-panel:get-logs", maxLines),
+	openDevTools: (target) => ipcRenderer.send("config-panel:open-devtools", target)
 });
 //#endregion

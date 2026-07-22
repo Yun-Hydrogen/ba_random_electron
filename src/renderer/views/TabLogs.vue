@@ -321,11 +321,10 @@ onBeforeUnmount(() => {
 
 /* ===== 全局动画 ===== */
 .tab-page {
-  animation: slide-in 0.3s cubic-bezier(0.25, 0, 0.25, 1);
-}
-@keyframes slide-in {
-  from { opacity: 0; transform: translateX(24px); }
-  to   { opacity: 1; transform: translateX(0); }
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ===== 滚动条（主题色 #99aabb） ===== */
@@ -352,10 +351,12 @@ onBeforeUnmount(() => {
 
 /* ===== 卡片 ===== */
 .card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 14px 16px;
-  margin-bottom: 12px;
-  border-radius: 14px;
-  background: #f8fafc;
+  background: rgb(251, 251, 251,0.5);
   border: 1px solid #e8ecf2;
 }
 
@@ -406,10 +407,12 @@ onBeforeUnmount(() => {
 
 /* ===== 日志列表 ===== */
 .log-list {
+  flex: 1;
   overflow-y: auto;
   font-size: 12px;
   font-family: 'UI', 'Bahnschrift', 'Microsoft YaHei UI', sans-serif;
   user-select: text;
+  padding: 4px 6px;
 }
 .log-empty {
   color: #ccc;
@@ -421,9 +424,18 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  padding: 2px 0;
-  border-bottom: 1px solid #fafbfc;
+  padding: 5px 10px;
+  margin: 5px 0;
+  background: #fff;
+  border-radius: 8px;
+  border: 1.5px solid #e0e4e8;
 }
+
+/* 各级别边框颜色 */
+.log-info    { border-color: #99ccdd; }
+.log-warn    { border-color: #e8a840; }
+.log-error   { border-color: #e05555; }
+.log-success { border-color: #55b888; }
 
 /*
  *  时间戳颜色按日志级别区分（取代彩色圆点）
