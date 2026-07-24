@@ -24,6 +24,13 @@
 
 <template>
   <div class="tab-page">
+
+    <!-- 班级管理 -->
+    <UiCard title="班级切换" desc="管理当前班级的学生名单" style="position: relative;">
+      <!-- 班级信息输入框等 -->
+      <NotReadyOverlay text="班级切换功能正在施工" />
+    </UiCard>
+
     <!-- 名单导入 -->
     <UiCard title="名单导入" desc="导入 txt/csv 文件或粘贴名单于输入框中（每行一名同学）">
       <div class="import-capsule">
@@ -106,6 +113,7 @@
  */
 import { ref, computed, watch, onMounted } from 'vue'
 import { UiCard, UiSlider } from '../RizUI'
+import NotReadyOverlay from '../RizUI/NotReadyOverlay.vue'
 
 /* Tab 主题色 */
 const tabTheme = '#66ccff'

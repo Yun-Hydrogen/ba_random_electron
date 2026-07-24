@@ -107,3 +107,6 @@
 - 抽取背景音乐 **KARUT** 的 **《Connected Sky》**
 
 - [RunUIAccess](https://github.com/shc0743/RunUIAccess)
+
+---
+Code with 💗 and AI by HydrogenRua-萌氢P | 惠州一中算法AI社&智能信息社

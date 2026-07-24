@@ -465,7 +465,7 @@ export function useConfigPanel() {
    *   使用 appInfo.exePath（应用自身的路径）。
    */
   async function createStartupTask() {
-    await window.configPanelApi?.createStartupTask({
+    return await window.configPanelApi?.createStartupTask({
       exePath: draft.admin.adminAutoStartPath || appInfo.exePath,
       taskName: draft.admin.adminAutoStartTaskName,
       admin: draft.admin.adminAutoStartAdmin

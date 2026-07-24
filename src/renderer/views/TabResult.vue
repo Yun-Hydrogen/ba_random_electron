@@ -40,25 +40,28 @@
   <div class="tab-page">
     <!--
       一、浮窗外观
-      控制抽取结果弹窗的视觉呈现
+      控制抽取结果浮窗的视觉呈现
     -->
     <UiCard title="浮窗外观" desc="调整抽取结果浮窗的视觉样式">
       <!-- 背景色 -->
-      <UiConfigRow label="浮窗背景颜色" hint="浮窗弹窗的整体底色">
+      <UiConfigRow label="浮窗背景颜色" hint="结果浮窗的整体底色">
         <UiColorPicker v-model="pickResult.panelBgColor" :color="tabTheme" teleport=".config-left" />
       </UiConfigRow>
       <!-- 边框色 -->
-      <UiConfigRow label="浮窗边框颜色" hint="结果浮窗的外框描边">
+      <UiConfigRow label="浮窗边框颜色" hint="结果浮窗的外框描边颜色">
         <UiColorPicker v-model="pickResult.panelBorderColor" :color="tabTheme" teleport=".config-left" />
       </UiConfigRow>
       <!-- 透明度滑块：内部存储 0-1，UI 显示 10-100% -->
-      <UiConfigRow label="浮窗不透明度" hint="数值越低越透明，100% 为完全不透明">
+      <UiConfigRow label="浮窗不透明度" hint="数值越高越不透明，100% 为完全不透明">
         <UiSlider :modelValue="opacityPercent" :min="10" :max="100" :color="tabTheme" display="%" @update:modelValue="$emit('update:pickResult',{...pickResult,panelOpacity:$event/100})" />
       </UiConfigRow>
       <!-- 装饰角色开关 -->
-      <UiConfigRow label="显示阿罗娜和普拉娜" hint="结果浮窗顶部是否显示阿罗娜 &amp; 普拉娜两小只">
+      <UiConfigRow label="结果浮窗顶部装饰" hint="结果浮窗顶部是否显示小阿罗娜&小普拉娜两小只">
         <UiSwitch :modelValue="pickResult.showDeco !== false" :color="tabTheme" @update:modelValue="$emit('update:pickResult',{...pickResult,showDeco:$event})" />
       </UiConfigRow>
+      <UiConfigRow label="" hint="" v-if="pickResult.showDeco == true" stack>
+      <img src="/image/Arona_Plana.png" style="margin:auto; height: 66px; display: block;"/>  
+      </UiConfigRow>  
     </UiCard>
 
     <!--
@@ -82,13 +85,19 @@
       <UiConfigRow label="抽取音乐音量" hint="背景音乐的响度百分比">
         <UiSlider :modelValue="pickResult.musicVolume || 60" :min="0" :max="100" :color="tabTheme" display="%" @update:modelValue="$emit('update:pickResult',{...pickResult,musicVolume:$event})" />
       </UiConfigRow>
-      <!-- BGM 起始秒数，hint 动态显示格式化时间 -->
-      <UiConfigRow label="播放起始位置" :hint="'BGM 从指定秒数开始播放（' + formatTime(pickResult.bgmStartTime || 0) + '）'">
-        <UiSlider :modelValue="pickResult.bgmStartTime || 0" :min="0" :max="120" :step="1" :color="tabTheme" display="s" @update:modelValue="$emit('update:pickResult',{...pickResult,bgmStartTime:$event})" />
+      <!-- BGM 起始秒数，UiTimeline 时间轴 -->
+      <UiConfigRow label="播放起始位置" :hint="'BGM 从指定秒数开始播放（' + formatTime(pickResult.bgmStartTime || 0) + '）'" stack>
+        <UiTimeline :modelValue="pickResult.bgmStartTime || 0" :min="0" :max="120" :color="tabTheme" @update:modelValue="$emit('update:pickResult',{...pickResult,bgmStartTime:$event})" />
+        <div style="margin-top: 6px;">
+          <button class="preview-btn" @click="previewBgm" :style="{ color: tabTheme, borderColor: tabTheme }">
+            <i class="fa-solid" :class="previewPlaying ? 'fa-stop' : 'fa-play'"></i>
+            {{ previewPlaying ? '停止' : '试听' }}
+          </button>
+        </div>
       </UiConfigRow>
       <!-- BGM 淡入淡出渐变秒数 -->
       <UiConfigRow label="淡入淡出时长" hint="BGM 开始和结束时的渐变过渡秒数">
-        <UiSlider :modelValue="pickResult.bgmFadeDuration || 1.5" :min="0.5" :max="5" :step="0.5" :color="tabTheme" :displayValue="(pickResult.bgmFadeDuration || 1.5).toFixed(1) + 's'" @update:modelValue="$emit('update:pickResult',{...pickResult,bgmFadeDuration:$event})" />
+        <UiSlider :modelValue="pickResult.bgmFadeDuration || 1.5" :min="0.5" :max="5" :step="0.1" :color="tabTheme" :displayValue="(pickResult.bgmFadeDuration || 1.5).toFixed(1) + 's'" @update:modelValue="$emit('update:pickResult',{...pickResult,bgmFadeDuration:$event})" />
       </UiConfigRow>
     </UiCard>
 
@@ -113,8 +122,8 @@
  *  3. opacityPercent    — 透明度 computed：内部 0-1 ↔ UI 10-100%
  *  4. formatTime        — 秒数 → MM:SS 格式化
  */
-import { computed } from 'vue'
-import { UiCard, UiConfigRow, UiSwitch, UiSlider, UiColorPicker } from '../RizUI'
+import { computed, ref } from 'vue'
+import { UiCard, UiConfigRow, UiSwitch, UiSlider, UiTimeline, UiColorPicker } from '../RizUI'
 
 const props = defineProps({ pickResult: Object })
 const emit = defineEmits(['update:pickResult'])
@@ -137,6 +146,41 @@ function formatTime(sec) {
   const m = Math.floor(s / 60)
   const rs = s % 60
   return `${m}:${String(rs).padStart(2, '0')}`
+}
+
+/* ---- BGM 预览 ---- */
+const previewAudio = ref(null)
+const previewPlaying = ref(false)
+const bgmReady = ref(true)  // bgm.mp3 通常已预加载，始终可用
+
+function previewBgm() {
+  if (previewPlaying.value) {
+    stopPreview()
+    return
+  }
+  const startTime = props.pickResult.bgmStartTime || 0
+  try {
+    const audio = new Audio('/sound/bgm.mp3')
+    audio.currentTime = startTime
+    audio.volume = (props.pickResult.musicVolume || 60) / 100
+    audio.play().catch(() => {})
+    previewAudio.value = audio
+    previewPlaying.value = true
+    // 预览 5 秒后自动停止
+    audio._previewTimer = setTimeout(() => stopPreview(), 5000)
+    audio.addEventListener('ended', stopPreview)
+  } catch { /* 忽略音频加载错误 */ }
+}
+
+function stopPreview() {
+  const audio = previewAudio.value
+  if (audio) {
+    audio.pause()
+    audio.removeEventListener('ended', stopPreview)
+    clearTimeout(audio._previewTimer)
+    previewAudio.value = null
+  }
+  previewPlaying.value = false
 }
 </script>
 
@@ -170,6 +214,31 @@ function formatTime(sec) {
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/* ===== 试听按钮 ===== */
+.preview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: 1.5px solid;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, opacity 0.15s;
+}
+.preview-btn:hover {
+  opacity: 0.75;
+}
+.preview-btn:active {
+  opacity: 0.55;
+}
+.preview-btn i {
+  font-size: 10px;
 }
 
 </style>

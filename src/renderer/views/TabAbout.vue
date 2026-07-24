@@ -24,7 +24,7 @@
     <div class="about-hero">
       <img src="/image/BlueRandom.png" alt="Blue Random" class="about-logo" />
       <h1 class="about-title">Blue Random | 蔚蓝点名</h1>
-      <p class="about-subtitle">老师，今天您出彩了吗</p>
+      <p class="about-subtitle">Sensei，今天您出彩了吗~</p>
       <p class="about-version">当前版本 v{{ appInfo.version || '-' }}</p>
     </div>
 
@@ -107,7 +107,7 @@
 
     <UiCard title="">
       <div class="about-section">
-      Code with ❤️ and AI by HydrogenRua-萌氢P | 惠州一中算法AI社
+      Code with ❤️ and AI by HydrogenRua-萌氢P | 惠州一中算法AI社&智能信息社
       </div>
     </UiCard>
 
@@ -159,7 +159,7 @@ const props = defineProps({ appInfo: Object })
 }
 
 .about-subtitle {
-  margin: 4px 0 0;
+  margin: 8px 0 0;
   font-size: 14px;
   font-weight: 500;
   color: #889;

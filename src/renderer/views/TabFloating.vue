@@ -34,32 +34,32 @@
 <template>
   <div class="tab-page floating-tab">
     <!-- 一、按钮样式 -->
-    <UiCard title="按钮样式" desc="调整悬浮按钮的基础外观与行为">
+    <UiCard title="行为" desc="调整悬浮按钮的行为">
 
-      <UiConfigRow label="按钮大小" hint="缩放百分比，100% 为默认尺寸">
-        <UiSlider :modelValue="fb.sizePercent || 100" :min="50" :max="200" :color="tabTheme" display="%" @update:modelValue="$emit('update:fb',{...fb,sizePercent:$event})" />
-      </UiConfigRow>
-
-      <UiConfigRow label="位置 X / Y" hint="应用退出时会记忆当前位置并保存">
+      <UiConfigRow label="位置 X / Y" hint="应用主动退出时会记忆当前位置并保存，通常情况下无需手动修改">
         <div class="cfg-xy-group">
           <input type="number" :value="fb.position.x" @input="$emit('update:fb',{...fb,position:{...fb.position,x:$event.target.value===''?null:parseInt($event.target.value)}})" class="capsule-input" placeholder="X" />
           <input type="number" :value="fb.position.y" @input="$emit('update:fb',{...fb,position:{...fb.position,y:$event.target.value===''?null:parseInt($event.target.value)}})" class="capsule-input" placeholder="Y" />
         </div>
       </UiConfigRow>
 
-      <UiConfigRow label="持续置顶" hint="启用后按钮始终悬浮于其他窗口之上">
+      <UiConfigRow label="持续置顶" hint="启用后开启悬浮按钮的置顶功能">
         <UiSwitch :modelValue="fb.alwaysOnTop" :color="tabTheme" @update:modelValue="$emit('update:fb',{...fb,alwaysOnTop:$event})" />
       </UiConfigRow>
 
-      <UiConfigRow label="任务栏可见" hint="悬浮按钮是否显示在任务栏中，可能解决多桌面下桌面意外跳转的问题。">
+      <UiConfigRow label="任务栏可见" hint="悬浮按钮是否显示在任务栏中，可能解决多桌面下桌面意外跳转的问题">
         <UiSwitch :modelValue="fb.showInTaskbar" :color="tabTheme" @update:modelValue="$emit('update:fb',{...fb,showInTaskbar:$event})" />
       </UiConfigRow>
     </UiCard>
 
     <!-- 二、自定义 -->
-    <UiCard title="自定义" desc="按钮中心图标、边框颜色等个性化设置">
+    <UiCard title="样式" desc="按钮中心图标、边框颜色等个性化设置">
 
       <!-- 中心图标 -->
+      <UiConfigRow label="按钮大小" hint="缩放百分比，100% 为默认尺寸">
+        <UiSlider :modelValue="fb.sizePercent || 100" :min="50" :max="200" :color="tabTheme" display="%" @update:modelValue="$emit('update:fb',{...fb,sizePercent:$event})" />
+      </UiConfigRow>
+
       <UiConfigRow label="中心图标" hint="按钮中央显示的图片，点击右侧按钮选择本地图片" stack>
         <div class="icon-picker-row">
           <div class="icon-actions">
