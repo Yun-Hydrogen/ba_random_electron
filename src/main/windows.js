@@ -231,6 +231,7 @@ function persistFloatingButtonPosition() {
 
   const baseConfig = config.refreshConfig();
   const bounds = floatingButtonWindow.getBounds();
+  console.log('[windows] 保存悬浮按钮位置:', bounds.x, bounds.y);
   const updated = config.normalizeConfig({
     ...baseConfig,
     floatingButton: {
@@ -306,6 +307,8 @@ async function fadeOutFloatingButtonWindow() {
   if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
   if (!floatingButtonWindow.isVisible()) return;
 
+  console.log('[windows] 悬浮按钮淡出');
+
   _cancelFloatingFade();
   const ctrl = new AbortController();
   _floatingFadeCtrl = ctrl;
@@ -332,18 +335,20 @@ async function fadeOutFloatingButtonWindow() {
 async function fadeInFloatingButtonWindow() {
   if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
 
+  console.log('[windows] 悬浮按钮淡入');
+
   _cancelFloatingFade();
   const ctrl = new AbortController();
   _floatingFadeCtrl = ctrl;
 
   /*
-   * setOpacity(0) → show() → blur() → setOpacity 0→1 渐变（400ms）。
-   * show()（而非 showInactive）确保 D3D9 下首帧被刷新；
-   * blur() 立即释放 toolbar 窗口无法持有的焦点，防止假死。
+   * setOpacity(0) → showInactive() → setOpacity 0→1 渐变（400ms）。
+   * showInactive() 明确告诉 Windows 不激活此窗口，避免从全屏结果窗
+   * 切回时 Windows 将焦点转移到 toolbar 窗口导致"半激活僵死"
+   * （可见但点击无响应，须点其他窗口才能恢复）。
    */
   floatingButtonWindow.setOpacity(0);
-  floatingButtonWindow.show();
-  floatingButtonWindow.blur();
+  floatingButtonWindow.showInactive();
   await animateWindowOpacity(floatingButtonWindow, 0, 1, FLOATING_WINDOW_FADE_MS, ctrl.signal);
 
   if (_floatingFadeCtrl === ctrl) _floatingFadeCtrl = null;
@@ -362,7 +367,9 @@ async function fadeInFloatingButtonWindow() {
  *   - 始终置顶（alwaysOnTop: true，级别 'screen-saver' 覆盖全屏应用）
  *   - 不在任务栏显示（skipTaskbar: true）
  *   - 不显示在 Alt+Tab 切换列表中（type: 'toolbar'）
- *   - 非 Windows 平台允许获取焦点（避免 macOS 上按钮无响应）
+ *   - 所有平台允许获取焦点（focusable: true），避免从全屏结果窗
+ *     切回时 toolbar 窗口陷入"半激活"僵死（点击无响应）。
+ *     配合 showInactive() 使用：窗口能接收点击，但显示时不抢焦点。
  *
  * 启动时尝试恢复上次保存的位置（来自 config.yml 的 position.x/y）。
  * 如果无保存位置，系统自动选择默认位置。
@@ -395,9 +402,7 @@ function createFloatingButtonWindow() {
     alwaysOnTop: cfg.floatingButton.alwaysOnTop,
     skipTaskbar: isDebugMode ? false : !cfg.floatingButton.showInTaskbar,
     type: isDebugMode ? undefined : 'toolbar',
-    focusable: isDebugMode
-      ? true
-      : process.platform !== 'win32',
+    focusable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -414,6 +419,7 @@ function createFloatingButtonWindow() {
 
   const win = new BrowserWindow(windowOptions);
   floatingButtonWindow = win;
+  console.log('[windows] 悬浮按钮窗口已创建', JSON.stringify({ width: baseSize.width, height: baseSize.height, hasSaved: hasSavedX && hasSavedY }));
 
   /* 增强置顶：screen-saver 级别可覆盖全屏应用 */
   if (cfg.floatingButton.alwaysOnTop) {
@@ -447,7 +453,7 @@ function createFloatingButtonWindow() {
       if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) return;
       if (isQuitting || isFloatingHiddenForPickCount) return;
       if (!floatingButtonWindow.isVisible()) {
-        floatingButtonWindow.show();
+        floatingButtonWindow.showInactive();
       }
     }, 0);
   });
@@ -484,12 +490,14 @@ function startFloatingWindowWatchdog() {
     if (isQuitting || isFloatingHiddenForPickCount) return;
 
     if (!floatingButtonWindow || floatingButtonWindow.isDestroyed()) {
+      console.log('[windows] 看门狗：悬浮按钮窗口已销毁，重建');
       createFloatingButtonWindow();
       return;
     }
 
     if (!floatingButtonWindow.isVisible()) {
-      floatingButtonWindow.show();
+      console.log('[windows] 看门狗：悬浮按钮不可见，恢复显示');
+      floatingButtonWindow.showInactive();
     }
   }, 450);
 }
@@ -515,6 +523,7 @@ function stopFloatingWindowWatchdog() {
  * 避免悬浮按钮进入半激活僵死状态（可见但点击无响应）。
  */
 function closePickResultWindow() {
+  console.log('[windows] 关闭结果窗口');
   if (!pickResultWindow || pickResultWindow.isDestroyed()) {
     currentPickResults = [];
     activePickResultToken = 0;
@@ -640,6 +649,7 @@ function openPickResultWindow(results) {
 
   isFloatingHiddenForPickCount = true;
   fadeOutFloatingButtonWindow();
+  console.log('[windows] 结果窗口已显示, token=' + activePickResultToken + ', 人数=' + currentPickResults.length);
 }
 
 
@@ -690,6 +700,7 @@ function handleDragMove(event, payload) {
 
 function handleDragEnd(event) {
   dragSessions.delete(event.sender.id);
+  console.log('[windows] 拖拽结束');
 }
 
 /*

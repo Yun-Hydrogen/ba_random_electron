@@ -166,6 +166,8 @@ windows.setDebugMode(isDebugMode);
 
 /* 劫持 console，使所有主进程日志进入统一缓冲 */
 logging.attachConsoleLogger();
+console.log('[main] 日志系统已就绪，isDebugMode:', isDebugMode);
+
 /* 注册 IPC 通道，接收渲染进程上报的日志 */
 logging.registerRendererLogIpc(ipcMain);
 
@@ -214,8 +216,40 @@ app.whenReady().then(() => {
    */
   logging.initLogFile();
 
+  console.log('[main] 应用启动', JSON.stringify({
+    version: app.getVersion(),
+    isAdmin: admin.isProcessElevated(),
+    isUiAccess: admin.IS_UIACCESS_PROCESS,
+    backend: startupConfig.admin?.renderingBackend || 'd3d9',
+    userData: app.getPath('userData')
+  }));
+
   // --------------------------------------------------------------------------
-  //  第 1 步：检查是否需要 UIAccess 提权重启
+  //  第 1 步：检查是否需要管理员提权重启
+  //
+  //  触发条件（全部满足）：
+  //    1. 配置中 requireAdminOnLaunch = true
+  //    2. 当前运行在 Windows 上
+  //    3. 当前进程不是管理员（已是管理员则跳过）
+  //
+  //  如果满足条件：通过 PowerShell Start-Process -Verb RunAs 以管理员
+  //  权限重启。用户会看到 UAC 弹窗，确认后新进程获得管理员权限。
+  // --------------------------------------------------------------------------
+  if (startupConfig.admin && startupConfig.admin.requireAdminOnLaunch
+    && admin.IS_WINDOWS && !admin.isProcessElevated()) {
+    console.log('[main] requireAdminOnLaunch=on，非管理员，请求提权');
+    const result = admin.requestAdminRelaunch();
+    if (result.ok) {
+      console.log('[main] 管理员提权已发起，退出当前进程');
+      windows.setQuitting(true);
+      app.exit(0);
+      return;
+    }
+    console.error('[main] 管理员提权失败:', result.detail || result.message);
+  }
+
+  // --------------------------------------------------------------------------
+  //  第 2 步：检查是否需要 UIAccess 提权重启
   //
   //  触发条件（全部满足）：
   //    1. 配置中 uiAccessEnabled = true
@@ -232,22 +266,26 @@ app.whenReady().then(() => {
     if (admin.isProcessElevated()) {
       const dllPath = admin.getDefaultUiAccessDllPath();
       if (fs.existsSync(dllPath)) {
+        console.log('[main] uiAccessEnabled=on，发起 UIAccess 提权');
         const result = admin.requestUiAccessRelaunch(dllPath);
         if (result.ok) {
+          console.log('[main] UIAccess 提权已发起，退出当前进程');
           /* 新进程已启动，退出当前进程 */
           windows.setQuitting(true);
           app.exit(0);
           return;  // ← 注意：这里的 return 终止了 whenReady 回调的后续执行
         }
-        console.error('UIAccess auto relaunch failed:', result.detail || result.message || 'unknown error');
+        console.error('[main] UIAccess 提权失败:', result.detail || result.message);
       } else {
-        console.error('UIAccess dll missing:', dllPath);
+        console.error('[main] UIAccess DLL 缺失:', dllPath);
       }
+    } else {
+      console.warn('[main] UIAccess 已开启但非管理员，跳过（需先通过"启动时管理员"提权）');
     }
   }
 
   // --------------------------------------------------------------------------
-  //  第 2 步：以下代码仅在"无需重启"时执行
+  //  第 3 步：以下代码仅在"无需重启"时执行
   //          即：权限已满足，或用户未启用提权功能
   // --------------------------------------------------------------------------
 
@@ -261,6 +299,7 @@ app.whenReady().then(() => {
    * 注意：托盘创建后应用不会在关闭所有窗口时退出（见 window-all-closed 事件），
    *        用户需通过托盘菜单显式退出。
    */
+  console.log('[main] 正常启动：创建托盘');
   tray.createTray({
     onOpenConfig: () => windows.openConfigPanelWindow(),
     onRestart: () => {
@@ -279,6 +318,7 @@ app.whenReady().then(() => {
    *   详见 ipc.js 中的 registerConfigPanelIpc()。
    */
   ipc.registerConfigPanelIpc();
+  console.log('[main] 配置面板 IPC 已注册');
 
   /*
    * 异步检查更新（不阻塞主线程）。
@@ -307,7 +347,7 @@ app.whenReady().then(() => {
       }
     }
   }).catch(err => {
-    console.error('Auto update check failed:', err);
+    console.error('[main] 更新检查失败:', err);
   });
 
   /*
@@ -323,6 +363,7 @@ app.whenReady().then(() => {
   windows.createFloatingButtonWindow();
   windows.createPickResultWindowInstance();
   windows.startFloatingWindowWatchdog();
+  console.log('[main] 窗口已预创建，看门狗已启动');
 
 
 
@@ -355,6 +396,7 @@ app.whenReady().then(() => {
  *   3. 保存悬浮按钮的屏幕位置到 config.yml（下次启动恢复位置）
  */
 app.on('before-quit', () => {
+  console.log('[main] before-quit: 保存状态并停止看门狗');
   windows.setQuitting(true);
   windows.stopFloatingWindowWatchdog();
   windows.persistFloatingButtonPosition();

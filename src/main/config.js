@@ -117,6 +117,7 @@ const DEFAULT_CONFIG = {
     adminAutoStartAdmin: true,            // 计划任务以管理员身份运行
     adminAutoStartPath: '',               // 计划任务的目标 exe 路径（空=自动检测）
     adminAutoStartTaskName: admin.ADMIN_TASK_DEFAULT_NAME,  // 计划任务名称
+    requireAdminOnLaunch: false,          // 启动时获取管理员权限（开启后显示 UIAccess 选项）
     uiAccessEnabled: false,              // 启用 UIAccess 置顶
     /*
      * Chromium 渲染后端（全模式通用，需重启）。
@@ -303,6 +304,10 @@ function normalizeConfig(input) {
       typeof adminSource.adminAutoStartTaskName === 'string' && adminSource.adminAutoStartTaskName.trim()
         ? adminSource.adminAutoStartTaskName.trim()
         : DEFAULT_CONFIG.admin.adminAutoStartTaskName,
+    requireAdminOnLaunch:
+      typeof adminSource.requireAdminOnLaunch === 'boolean'
+        ? adminSource.requireAdminOnLaunch
+        : DEFAULT_CONFIG.admin.requireAdminOnLaunch,
     uiAccessEnabled:
       typeof adminSource.uiAccessEnabled === 'boolean'
         ? adminSource.uiAccessEnabled
@@ -487,6 +492,8 @@ function toConfigYamlWithComments(config) {
     `  adminAutoStartPath: ${yamlSingleQuote(adminCfg.adminAutoStartPath)}`,
     '  # 计划任务在任务计划程序中的显示名称',
     `  adminAutoStartTaskName: ${yamlSingleQuote(adminCfg.adminAutoStartTaskName || admin.ADMIN_TASK_DEFAULT_NAME)}`,
+    '  # 启动时自动获取管理员权限（开启后显示 UIAccess 选项）',
+    `  requireAdminOnLaunch: ${adminCfg.requireAdminOnLaunch ? 'true' : 'false'}`,
     '  # 管理员运行时启用 UIAccess（需要 uiaccess.dll 随包分发）',
     `  uiAccessEnabled: ${adminCfg.uiAccessEnabled ? 'true' : 'false'}`,
     '  # Chromium 渲染后端: d3d9 | vulkan | gl（需重启）',
@@ -515,6 +522,7 @@ function saveConfig(config) {
   const yamlText = toConfigYamlWithComments(config);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, yamlText, 'utf8');
+  console.log('[config] 配置已保存到磁盘, size=' + yamlText.length + ' bytes');
 }
 
 /*
@@ -567,9 +575,10 @@ function loadConfig() {
     const parsed = yaml.load(raw);
     const normalized = normalizeConfig(parsed);
     saveConfig(normalized);
+    console.log('[config] 配置加载成功, path=' + configPath + ', size=' + raw.length + ' bytes');
     return normalized;
   } catch (error) {
-    console.error('Failed to load config.yml, using defaults.', error);
+    console.error('[config] 配置加载失败，使用默认值:', error.message);
     const fallback = normalizeConfig(DEFAULT_CONFIG);
     saveConfig(fallback);
     return fallback;

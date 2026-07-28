@@ -95,6 +95,7 @@ function createTray({ onOpenConfig, onRestart, onQuit }) {
   });
   tray.setContextMenu(trayMenu);
 
+  console.log('[tray] 系统托盘已创建');
   return tray;
 }
 

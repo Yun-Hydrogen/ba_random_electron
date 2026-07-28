@@ -218,9 +218,11 @@ function registerConfigPanelIpc() {
    *    3. windows.refreshFloatingButtonWindow() — 重建悬浮窗以应用新外观
    */
   ipcMain.handle('config-panel:save-config', (_event, payload) => {
+    console.log('[ipc] 保存配置请求, 字段数=' + Object.keys(payload || {}).length);
     const normalized = config.normalizeConfig(payload);
     config.saveConfig(normalized);
     windows.refreshFloatingButtonWindow();
+    console.log('[ipc] 配置已保存，悬浮窗已刷新');
     return { ok: true };
   });
 
@@ -263,6 +265,7 @@ function registerConfigPanelIpc() {
    *  返回：{ ok, message, detail? } — 与 admin.requestAdminRelaunch() 一致。
    */
   ipcMain.handle('config-panel:admin-elevate', () => {
+    console.log('[ipc] 用户请求管理员提权重启');
     const result = admin.requestAdminRelaunch();
     if (result.ok) {
       windows.setQuitting(true);
@@ -296,10 +299,13 @@ function registerConfigPanelIpc() {
    *  返回：{ ok, message, detail? } — 与 admin.createAdminStartupTask() 一致。
    */
   ipcMain.handle('config-panel:create-startup-task', (_event, payload) => {
-    return admin.createAdminStartupTask({
+    console.log('[ipc] 创建计划任务, 路径=' + (payload.exePath || '自动检测'));
+    const result = admin.createAdminStartupTask({
       taskName: payload.taskName,
       exePath: payload.exePath
     });
+    console.log('[ipc] 计划任务结果:', result.ok ? '成功' : '失败', result.message || '');
+    return result;
   });
 
   /*
@@ -359,6 +365,7 @@ function registerConfigPanelIpc() {
    *  注意：此操作不可撤销，前端会弹出二次确认对话框。
    */
   ipcMain.handle('config-panel:reset-config', () => {
+    console.log('[ipc] 重置配置为默认值');
     config.saveConfig(config.normalizeConfig({}));
     windows.refreshFloatingButtonWindow();
     return { ok: true };

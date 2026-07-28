@@ -12,7 +12,8 @@
     板块           | 包含的配置项
     ───────────────┼────────────────────────────────────────────
     1. 开机自启    | 程序路径（含选取按钮）、计划任务名、管理员运行开关
-    2. 置顶增强    | 管理员置顶开关、UIAccess 置顶开关（仅管理员可见）
+    2. 置顶增强    | 启动时管理员权限开关 → 控制 UIAccess 可见性
+                   | UIAccess 置顶（仅当上方的开关开启时显示）
     3. 渲染后端    | 图形后端选择（d3d9/vulkan/gl）、禁用直接合成、放弃 GPU 加速
     4. 配置管理    | 配置文件路径展示、打开目录、重置配置（二次确认）、重启
     5. 检查更新    | 从 GitHub Releases 拉取最新版本信息
@@ -118,18 +119,34 @@
       </div>
     </UiCard>
 
-    <!-- 二、置顶增强 -->
-    <UiCard title="置顶增强" desc='级高级别的置顶功能，需管理员权限，并且需要先启动悬浮按钮置顶功能'>
+    <!-- 二、置顶增强
+       设计说明：
+         不再依赖 appInfo.isAdmin（当前进程权限）来控制 UIAccess 显隐，
+         而是通过"启动时获得管理员权限"开关让用户显式控制。
+         开关关闭 → 提示"UIAccess 需要管理员权限"
+         开关开启 → 显示 UIAccess 配置行 + DLL 检测状态
+    -->
+    <UiCard title="置顶增强" desc="更高级别的置顶功能，需要先启动悬浮按钮置顶功能">
 
-      <!-- UIAccess 置顶：仅当进程已是管理员时显示 -->
-      <UiConfigRow v-if="appInfo.isAdmin" label="UIAccess 置顶" hint="系统级置顶权限，可覆盖绝大部分应用">
-        <UiSwitch :modelValue="admin.uiAccessEnabled" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, uiAccessEnabled: $event })" />
+      <!-- 启动时管理员权限开关 -->
+      <UiConfigRow label="启动时获得管理员权限" hint="开启后显示 UIAccess 置顶选项，每次启动时自动请求管理员权限">
+        <UiSwitch :modelValue="admin.requireAdminOnLaunch === true" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, requireAdminOnLaunch: $event })" />
       </UiConfigRow>
-      <div v-if="!appInfo.uiAccessDllExists && admin.uiAccessEnabled" class="cfg-hint warn">
-      <i class="fa-regular fa-circle-xmark"></i> 未检测到 uiaccess.dll，UIAccess 功能将不可用，请检查程序完整性。
-      </div>
-      <div v-if="appInfo.uiAccessDllExists && admin.uiAccessEnabled" class="cfg-hint success">
-      <i class="fa-regular fa-circle-check"></i> UIAccess 功能可用。
+
+      <!-- UIAccess 置顶：仅当"启动时管理员权限"开启时显示 -->
+      <template v-if="admin.requireAdminOnLaunch">
+        <UiConfigRow label="UIAccess 置顶" hint="系统级置顶权限，可覆盖绝大部分应用">
+          <UiSwitch :modelValue="admin.uiAccessEnabled" :color="tabTheme" @update:modelValue="$emit('update:admin', { ...admin, uiAccessEnabled: $event })" />
+        </UiConfigRow>
+        <div v-if="!appInfo.uiAccessDllExists && admin.uiAccessEnabled" class="cfg-hint warn">
+          <i class="fa-regular fa-circle-xmark"></i> 未检测到 uiaccess.dll，UIAccess 功能将不可用，请检查程序完整性。
+        </div>
+        <div v-if="appInfo.uiAccessDllExists && admin.uiAccessEnabled" class="cfg-hint success">
+          <i class="fa-regular fa-circle-check"></i> UIAccess 功能可用。
+        </div>
+      </template>
+      <div v-else class="cfg-hint warn" style="margin-top: 4px;">
+        <i class="fa-solid fa-triangle-exclamation"></i> UIAccess 置顶需要管理员权限，请先开启"启动时获得管理员权限"。
       </div>
     </UiCard>
 

@@ -295,10 +295,11 @@ function requestAdminRelaunch() {
     const detail = [result.error ? String(result.error) : '', result.stderr || '', result.stdout || '']
       .join('\n')
       .trim();
-    console.error('Admin relaunch failed:', detail || 'command failed');
+    console.error('[admin] 管理员提权失败:', detail || 'command failed');
     return { ok: false, message: '管理员权限请求失败或被取消。', detail: detail || 'command failed' };
   }
 
+  console.log('[admin] 管理员提权命令已执行, exe=' + exePath);
   return { ok: true, message: '已请求管理员权限，即将重新启动。' };
 }
 
@@ -412,10 +413,11 @@ function requestUiAccessRelaunch(uiAccessDllPath) {
     detailParts.push(`cwd=${exeDir}`);
     detailParts.push(`ps=${psPath}`);
     const detail = detailParts.join('\n').trim();
-    console.error('UIAccess relaunch failed:', detail || 'command failed');
+    console.error('[admin] UIAccess 提权失败:', detail || 'command failed');
     return { ok: false, message: 'UIAccess 请求失败或被取消。', detail: detail || 'command failed' };
   }
 
+  console.log('[admin] UIAccess 提权命令已执行, dll=' + uiAccessDllPath);
   return { ok: true, message: '已请求 UIAccess 权限，即将重新启动。' };
 }
 
@@ -504,8 +506,10 @@ function createAdminStartupTask({ taskName, exePath, runAsUser }) {
       const command = `Start-Process -FilePath 'schtasks.exe' -ArgumentList '${quoteForPowerShell(psArgs)}' -Verb RunAs -Wait`;
       execFileSync('powershell', ['-NoProfile', '-Command', command], { stdio: 'ignore' });
     }
+    console.log('[admin] 计划任务创建成功, 名称=' + safeTaskName + ', 路径=' + exePath);
     return { ok: true, message: '计划任务已创建或更新。' };
   } catch (error) {
+    console.error('[admin] 计划任务创建失败:', error.message || String(error));
     return { ok: false, message: '计划任务创建失败或被取消。', detail: String(error) };
   }
 }

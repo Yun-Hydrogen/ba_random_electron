@@ -203,12 +203,14 @@ async function checkUpdateFromMain() {
   const repoName = 'ba_random_electron';
   const debug = [];
   const localVersion = app.getVersion();
+  console.log('[update] 开始检查更新, 本地版本=' + localVersion);
   const releaseApi = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
   debug.push(`GET ${releaseApi}`);
 
   /* ---- 第 1 步：获取最新 Release ---- */
   const releaseResp = await fetchUrl(releaseApi);
   if (releaseResp.statusCode < 200 || releaseResp.statusCode >= 300) {
+    console.error('[update] Release API 请求失败, statusCode=' + releaseResp.statusCode);
     return {
       ok: false,
       status: 'error',
@@ -281,6 +283,7 @@ async function checkUpdateFromMain() {
 
   if (compare < 0) {
     /* 有更新 */
+    console.log('[update] 发现新版本:', remoteVersion, '(当前:', localVersion + ')');
     return {
       ok: true,
       status: 'update',
@@ -296,6 +299,7 @@ async function checkUpdateFromMain() {
 
   if (compare === 0) {
     /* 已是最新 */
+    console.log('[update] 已是最新版本:', localVersion);
     return {
       ok: true,
       status: 'ok',

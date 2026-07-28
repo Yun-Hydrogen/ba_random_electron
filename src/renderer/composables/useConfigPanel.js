@@ -103,7 +103,7 @@
     }
     admin: {                                — 高级设置（管理员权限等）
       adminAutoStartTaskName, adminAutoStartAdmin,
-      uiAccessEnabled
+      requireAdminOnLaunch, uiAccessEnabled
     }
   }
 
@@ -326,6 +326,8 @@ export function useConfigPanel() {
       adminAutoStartPath: '',
       adminAutoStartTaskName: 'Blue Random (Admin)',
       adminAutoStartAdmin: true,
+      /* 启动时请求管理员权限；开启后 UIAccess 选项才可见 */
+      requireAdminOnLaunch: false,
       uiAccessEnabled: false,
       renderingBackend: 'd3d9',
       disableDirectComposition: true,
